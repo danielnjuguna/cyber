@@ -17,8 +17,14 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Create uploads directories if they don't exist
+// Create uploads directories if they don't exist (only in development)
 const createUploadsDirectories = () => {
+  // Skip in Vercel environment
+  if (process.env.VERCEL) {
+    console.log('Skipping directory creation in Vercel environment');
+    return;
+  }
+  
   const directories = ['uploads', 'uploads/documents', 'uploads/thumbnails', 'uploads/images'];
   directories.forEach(dir => {
     if (!fs.existsSync(dir)) {
@@ -28,14 +34,14 @@ const createUploadsDirectories = () => {
   });
 };
 
-// Initialize the database
-const startServer = async () => {
+// Initialize the database and set up middleware
+const initializeApp = async () => {
   try {
     console.log('Starting database initialization...');
     await initDb();
     console.log('Database initialization complete!');
     
-    // Create uploads directories
+    // Create uploads directories (only in development)
     createUploadsDirectories();
     
     // Middleware
@@ -94,16 +100,26 @@ const startServer = async () => {
       res.status(200).json({ message: 'Server is running' });
     });
     
-    // Start server
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    // Vercel-specific route for handling root path
+    app.get('/api', (req, res) => {
+      res.status(200).json({ message: 'API is running' });
     });
+    
+    return true;
   } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+    console.error('Failed to initialize app:', error);
+    return false;
   }
 };
 
-startServer();
+// Initialize the app
+initializeApp();
+
+// Only start the server if not running in Vercel
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;
