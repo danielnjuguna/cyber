@@ -45,13 +45,13 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
         switch (extension) {
           // PDF documents
           case 'pdf':
-            setFileType('pdf');
+            setFileType('pdf-custom'); // Use our own PDF viewer
             setFormatIcon(() => FileText);
             break;
           
           // Word documents
           case 'docx':
-            setFileType('docx');
+            setFileType('docx-custom'); // Use custom document handling
             setFormatIcon(() => FileText);
             break;
           case 'doc':
@@ -63,7 +63,7 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
           // Excel spreadsheets
           case 'xlsx':
           case 'xls':
-            setFileType('xlsx');
+            setFileType('xlsx-custom'); // Use custom spreadsheet handling
             setFormatIcon(() => FileSpreadsheet);
             break;
           
@@ -104,7 +104,7 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
           
           // CSV files
           case 'csv':
-            setFileType('csv');
+            setFileType('csv-custom');
             setFormatIcon(() => FileSpreadsheet);
             break;
           
@@ -128,7 +128,7 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
             setFormatIcon(() => File);
         }
         
-        if (fileType !== 'txt-custom' && fileType !== 'pptx-custom') {
+        if (!['txt-custom', 'pptx-custom'].includes(fileType)) {
           setLoading(false);
         }
       } catch (err) {
@@ -322,6 +322,56 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
     </div>
   );
 
+  // Custom PDF Viewer component
+  const PDFViewer = () => (
+    <div className="relative">
+      <div className="h-[600px] overflow-hidden touch-none" ref={viewerRef}>
+        <iframe 
+          src={`${documentUrl}#toolbar=0&view=FitH`} 
+          className="w-full h-full"
+          title="PDF document preview"
+        />
+      </div>
+      
+      {/* Blur overlay covering exactly bottom half of visible content */}
+      <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
+        {/* Sharp blur transition with clear demarcation line */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+        
+        {/* Subtle divider line to clearly indicate where preview ends */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+        
+        {/* Lock icon and message */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+            <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+            <p className="text-base font-medium">Contact us for the full document</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Only the top portion is available for preview
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Document Type Preview
+  const DocumentTypePreview = ({ type }) => {
+    const Icon = formatIcon;
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center">
+        <div className="bg-muted/30 p-6 rounded-xl mb-4">
+          <Icon className="h-16 w-16 text-primary" />
+        </div>
+        <h3 className="text-lg font-medium mb-2">{formatName} Document</h3>
+        <p className="text-muted-foreground mb-4">
+          {type} document preview available after contact.
+        </p>
+        <p className="text-sm text-muted-foreground">Contact us to access the full document.</p>
+      </div>
+    );
+  };
+
   const renderFileViewer = () => {
     const IconComponent = formatIcon;
     
@@ -341,6 +391,23 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
     // Use custom Text viewer for TXT files
     if (fileType === 'txt-custom') {
       return <TextViewer text={textContent} />;
+    }
+    
+    // Use custom viewers for document types
+    if (fileType === 'pdf-custom') {
+      return <PDFViewer />;
+    }
+    
+    if (fileType === 'docx-custom') {
+      return <DocumentTypePreview type="Word" />;
+    }
+    
+    if (fileType === 'xlsx-custom') {
+      return <DocumentTypePreview type="Excel" />;
+    }
+    
+    if (fileType === 'csv-custom') {
+      return <DocumentTypePreview type="CSV" />;
     }
     
     // Use custom PowerPoint viewer for PPTX files
@@ -383,43 +450,49 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
       );
     }
 
-    return (
-      <div className="relative">
-        {/* Document viewer set to show exactly one page height with overflow hidden */}
-        <div className="h-[600px] overflow-hidden touch-none" ref={viewerRef}>
-          {/* Invisible overlay to catch all mouse events and prevent interaction */}
-          <div className="absolute inset-0 z-10" 
-               style={{ pointerEvents: 'none' }}></div>
+    // Fallback to using FileViewer for other types
+    try {
+      return (
+        <div className="relative">
+          {/* Document viewer set to show exactly one page height with overflow hidden */}
+          <div className="h-[600px] overflow-hidden touch-none" ref={viewerRef}>
+            {/* Invisible overlay to catch all mouse events and prevent interaction */}
+            <div className="absolute inset-0 z-10" 
+                style={{ pointerEvents: 'none' }}></div>
+            
+            <FileViewer
+              fileType={fileType}
+              filePath={documentUrl}
+              onError={onError}
+              errorComponent={CustomErrorComponent}
+            />
+          </div>
           
-          <FileViewer
-            fileType={fileType}
-            filePath={documentUrl}
-            onError={onError}
-            errorComponent={CustomErrorComponent}
-          />
-        </div>
-        
-        {/* Blur overlay covering exactly bottom half of visible content */}
-        <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
-          {/* Sharp blur transition with clear demarcation line */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
-          
-          {/* Subtle divider line to clearly indicate where preview ends */}
-          <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
-          
-          {/* Lock icon and message */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
-              <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
-              <p className="text-base font-medium">Contact us for the full document</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Only the top half of the first page is available for preview
-              </p>
+          {/* Blur overlay covering exactly bottom half of visible content */}
+          <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
+            {/* Sharp blur transition with clear demarcation line */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+            
+            {/* Subtle divider line to clearly indicate where preview ends */}
+            <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+            
+            {/* Lock icon and message */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+                <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+                <p className="text-base font-medium">Contact us for the full document</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Only the top half of the first page is available for preview
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    } catch (error) {
+      console.error("Error in FileViewer:", error);
+      return <CustomErrorComponent />;
+    }
   };
 
   // Custom error component for FileViewer

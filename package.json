@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node src/server/index.js",
-    "build": "vite build",
+    "build": "npm install --legacy-peer-deps && vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
