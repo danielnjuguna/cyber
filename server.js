@@ -152,6 +152,37 @@ app.use('/api/services', (req, res, next) => {
   }
 });
 
+// Add fallback middleware for missing images
+app.use('/uploads/:type/:filename', (req, res, next) => {
+  const { type, filename } = req.params;
+  const filePath = join(__dirname, 'uploads', type, filename);
+  
+  console.log(`Checking file path: ${filePath}`);
+  if (existsSync(filePath)) {
+    // File exists, let the static middleware handle it
+    return next();
+  }
+  
+  console.log(`File not found: ${filePath}, returning placeholder`);
+  
+  // Serve placeholder based on file type
+  if (type === 'thumbnails') {
+    // Serve a placeholder thumbnail
+    res.setHeader('Content-Type', 'image/png');
+    res.sendFile(join(__dirname, 'public', 'placeholder-thumbnail.png'));
+  } else if (type === 'services') {
+    // Serve a placeholder service image
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.sendFile(join(__dirname, 'public', 'placeholder-service.jpg'));
+  } else if (type === 'documents') {
+    // For documents, just return a 404 as we can't create placeholders for documents
+    res.status(404).json({ error: 'Document not found' });
+  } else {
+    // For unknown types, continue to the next handler
+    next();
+  }
+});
+
 // Serve static files from uploads directory with better error handling
 app.use('/uploads', (req, res, next) => {
   console.log(`Serving static file from uploads: ${req.url}`);
@@ -160,7 +191,7 @@ app.use('/uploads', (req, res, next) => {
   if (existsSync(filePath)) {
     console.log(`File exists at: ${filePath}`);
   } else {
-    console.log(`File does not exist at: ${filePath}`);
+    console.log(`File does not exist at: ${filePath}, trying fallback`);
   }
   next();
 }, express.static(join(__dirname, 'uploads'), {
@@ -340,6 +371,38 @@ const setupRoutes = async () => {
       });
     }
   });
+  
+  // Add global error handler for API routes - moved here after routes are registered
+  app.use('/api', (req, res, next) => {
+    res.on('error', (err) => {
+      console.error(`Response error on ${req.method} ${req.url}:`, err);
+    });
+    next();
+  });
+
+  // Add a fallback for database errors in API routes
+  app.use('/api', async (req, res, next) => {
+    req.dbErrorHandled = false;
+    
+    // Create a failsafe timeout to prevent hanging requests
+    const apiTimeout = setTimeout(() => {
+      if (!res.headersSent) {
+        console.error(`API request timeout for ${req.method} ${req.url}`);
+        res.status(503).json({
+          error: 'Service temporarily unavailable',
+          message: 'Request timed out. Please try again later.',
+          path: req.originalUrl
+        });
+      }
+    }, 15000); // 15 second timeout
+    
+    // Clean up the timeout when the response is sent
+    res.on('finish', () => {
+      clearTimeout(apiTimeout);
+    });
+    
+    next();
+  });
 };
 
 // Create required directories if they don't exist
@@ -404,11 +467,29 @@ const startServer = async () => {
     const isConnected = await testConnection();
     if (!isConnected) {
       console.error('Failed to connect to database. Server will not start.');
-      process.exit(1);
+      if (process.env.NODE_ENV !== 'production') {
+        process.exit(1);
+      } else {
+        console.log('Continuing in production despite database connection failure');
+      }
     }
 
     // Setup routes FIRST
     await setupRoutes();
+    
+    // Add custom error handler for all API routes
+    app.use((err, req, res, next) => {
+      if (req.originalUrl?.startsWith('/api/') && !res.headersSent) {
+        console.error(`Error in API request ${req.method} ${req.originalUrl}:`, err);
+        res.status(500).json({
+          error: 'Internal server error',
+          message: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : err.message,
+          path: req.originalUrl
+        });
+      } else {
+        next(err);
+      }
+    });
 
     // THEN serve static files and add catch-all route AFTER API routes are registered
     // --- Serve Static Frontend Files (Added for Render deployment) ---
