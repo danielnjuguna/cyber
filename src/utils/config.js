@@ -1,17 +1,21 @@
 // API Configuration
 
-// Check if running in production environment (Render sets NODE_ENV=production)
-const isProduction = process.env.NODE_ENV === 'production';
+// In Vite, we need to use import.meta.env.MODE to check production environment,
+// not process.env which may not be available in the client bundle
+const isProd = import.meta.env.MODE === 'production' || import.meta.env.PROD;
 
-// Read the variable from Vite's env (works reliably in local dev)
-const viteApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+// FORCE to use '/api' in production, log the environment to debug
+console.log('Build environment:', {
+  mode: import.meta.env.MODE, 
+  isProd,
+  apiBaseUrl: isProd ? '/api' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api')
+});
 
-// Determine the Base URL:
-// - If in production (on Render), ALWAYS use relative path '/api'
-// - Otherwise (local dev), use the value from .env or fallback to localhost
-export const BASE_URL = isProduction
-  ? '/api'
-  : (viteApiBaseUrl || 'http://localhost:5000/api');
+// For development, use VITE_API_BASE_URL from .env files if set
+// For production, ALWAYS use the relative '/api' path
+export const BASE_URL = isProd 
+  ? '/api' 
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
 
 export const API_ENDPOINTS = {
   // Auth endpoints
