@@ -268,21 +268,6 @@ const createUploadDirectories = async () => {
   }
 };
 
-// --- Serve Static Frontend Files (Added for Render deployment) ---
-// Serve the built Vite assets from the 'dist' directory
-app.use(express.static(join(__dirname, 'dist')));
-
-// --- Catch-all Route (Added for Render deployment) ---
-// For any request that doesn't match an API route or a static file,
-// serve the index.html. This is crucial for React Router.
-app.get('*', (req, res) => {
-  // Avoid sending HTML for API-like paths that weren't matched explicitly
-  if (req.originalUrl.startsWith('/api/') || req.originalUrl.startsWith('/uploads/')) {
-     return res.status(404).json({ message: 'Resource not found' });
-  }
-  res.sendFile(join(__dirname, 'dist', 'index.html'));
-});
-
 // Start server
 const startServer = async () => {
   try {
@@ -296,8 +281,24 @@ const startServer = async () => {
       process.exit(1);
     }
 
-    // Setup routes
+    // Setup routes FIRST
     await setupRoutes();
+
+    // THEN serve static files and add catch-all route AFTER API routes are registered
+    // --- Serve Static Frontend Files (Added for Render deployment) ---
+    // Serve the built Vite assets from the 'dist' directory
+    app.use(express.static(join(__dirname, 'dist')));
+
+    // --- Catch-all Route (Added for Render deployment) ---
+    // For any request that doesn't match an API route or a static file,
+    // serve the index.html. This is crucial for React Router.
+    app.get('*', (req, res) => {
+      // Avoid sending HTML for API-like paths that weren't matched explicitly
+      if (req.originalUrl.startsWith('/api/') || req.originalUrl.startsWith('/uploads/')) {
+         return res.status(404).json({ message: 'Resource not found' });
+      }
+      res.sendFile(join(__dirname, 'dist', 'index.html'));
+    });
 
     // Start listening - Modified for Render
     app.listen(port, '0.0.0.0', () => { // Listen on 0.0.0.0
