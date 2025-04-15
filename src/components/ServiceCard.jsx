@@ -14,6 +14,7 @@ import { ArrowRight, Sparkles, MessageCircle, X, Image } from 'lucide-react';
 import { openWhatsApp } from '@/utils/contact';
 import { toast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getFileUrl } from '@/utils/config';
 
 const ServiceCard = ({ 
   title, 
@@ -55,9 +56,7 @@ const ServiceCard = ({
   // Ensure imageUrl has proper server path if it's a relative path from database
   const getImageUrl = (url) => {
     if (!url) return null;
-    if (url.startsWith('http')) return url; // External URL
-    // Make sure url has the right format regardless of whether it starts with / or not
-    return `http://localhost:5000${url.startsWith('/') ? url : `/${url}`}`;
+    return getFileUrl(url);
   };
   
   // Fallback image URL - using a more reliable placeholder service

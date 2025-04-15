@@ -5,6 +5,7 @@ import { Eye, MessageCircle, FileText } from 'lucide-react';
 import { openWhatsApp } from '@/utils/contact';
 import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { getFileUrl } from '@/utils/config';
 
 const DocumentPreview = ({ id, title, description, thumbnailUrl, previewUrl, className }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -15,9 +16,7 @@ const DocumentPreview = ({ id, title, description, thumbnailUrl, previewUrl, cla
   // Fix the thumbnail URL if it's a relative path
   const getThumbnailUrl = (url) => {
     if (!url) return '';
-    if (url.startsWith('http')) return url;
-    // Ensure the URL starts with the correct base URL
-    return `http://localhost:5000${url.startsWith('/') ? url : `/${url}`}`;
+    return getFileUrl(url);
   };
   
   const handleWhatsAppContact = (e) => {

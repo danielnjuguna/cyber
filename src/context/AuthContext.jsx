@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
+import { API_ENDPOINTS } from '@/utils/config';
 
 // Create auth context
 const AuthContext = createContext({
@@ -30,7 +31,7 @@ export const AuthProvider = ({ children }) => {
     if (!token) return null;
     
     try {
-      const response = await fetch('http://localhost:5000/api/users/profile', {
+      const response = await fetch(API_ENDPOINTS.PROFILE, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -89,7 +90,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      const response = await fetch('http://localhost:5000/api/users/login', {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +156,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      const response = await fetch('http://localhost:5000/api/users/register', {
+      const response = await fetch(API_ENDPOINTS.REGISTER, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -204,7 +205,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      const response = await fetch('http://localhost:5000/api/users/request-reset', {
+      const response = await fetch(API_ENDPOINTS.REQUEST_RESET, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +242,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      const response = await fetch('http://localhost:5000/api/users/reset-password', {
+      const response = await fetch(API_ENDPOINTS.RESET_PASSWORD, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

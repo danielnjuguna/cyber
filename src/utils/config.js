@@ -47,6 +47,17 @@ export const getFileUrl = (path) => {
   if (path.startsWith('http')) {
     return path;
   }
-  // Otherwise, assume it's relative to the root domain (e.g., /uploads/...)
-  return `/${path.replace(/^\//, '')}`; // Ensure it starts with a single slash
+  
+  // Otherwise, construct the URL based on environment
+  // For uploads, we need to use the domain root, not the /api path
+  // In production (Render), this will be a relative path
+  // In development, we need the full localhost URL
+  const baseServerUrl = isProd 
+    ? '' // Empty string for relative URLs in production
+    : 'http://localhost:5000'; // Full server URL in development
+    
+  // Ensure path starts with a single slash
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  
+  return `${baseServerUrl}${normalizedPath}`;
 }; 
