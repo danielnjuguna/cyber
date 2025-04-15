@@ -60,6 +60,7 @@ import {
 import { api, handleApiError } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { getFileUrl } from '@/utils/config';
 
 // Helper function to format dates to dd/mm/yyyy
 const formatDate = (dateString) => {
@@ -515,7 +516,7 @@ const AdminDocuments = () => {
                     <TableCell>{formatDate(doc.created_at)}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" className="mr-1" onClick={() => {
-                        const downloadUrl = `http://localhost:5000${doc.document_path}`;
+                        const downloadUrl = getFileUrl(doc.document_path);
                         window.open(downloadUrl, '_blank');
                       }}>
                         <Eye className="h-4 w-4" />

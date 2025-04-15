@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { api } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
+import { getFileUrl } from '@/utils/config';
 
 // Mock data for documents (fallback if API fails)
 const allDocumentsFallback = [
@@ -86,10 +87,10 @@ const Documents = () => {
             title: doc.title,
             description: doc.description,
             thumbnailUrl: doc.thumbnail_path 
-              ? `http://localhost:5000${doc.thumbnail_path.startsWith('/') ? doc.thumbnail_path : `/${doc.thumbnail_path}`}` 
+              ? getFileUrl(doc.thumbnail_path) 
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
             previewUrl: doc.document_path
-              ? `http://localhost:5000${doc.document_path.startsWith('/') ? doc.document_path : `/${doc.document_path}`}`
+              ? getFileUrl(doc.document_path)
               : null,
             category: doc.category || 'other'
           }));

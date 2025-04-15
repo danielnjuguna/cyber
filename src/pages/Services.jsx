@@ -6,6 +6,7 @@ import { setupScrollAnimations } from '@/utils/animations';
 import { FileText, FileImage, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
+import { getFileUrl } from '@/utils/config';
 
 
 
@@ -93,7 +94,7 @@ const Services = () => {
             longDescription: service.long_description,
             icon: getServiceIcon(service.title),
             imageUrl: service.image_path 
-              ? `http://localhost:5000${service.image_path.startsWith('/') ? service.image_path : `/${service.image_path}`}` 
+              ? getFileUrl(service.image_path)
               : 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?q=80&w=2070&auto=format&fit=crop'
           }));
           

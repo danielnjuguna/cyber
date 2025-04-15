@@ -9,6 +9,7 @@ import { openWhatsApp } from '@/utils/contact';
 import { toast } from '@/hooks/use-toast';
 import { api } from '@/utils/api';
 import DocumentViewer from '@/components/DocumentViewer';
+import { getFileUrl } from '@/utils/config';
 
 const DocumentView = () => {
   const { id } = useParams();
@@ -39,11 +40,11 @@ const DocumentView = () => {
             longDescription: response.document.description, // Use description as long description if needed
             category: response.document.category || 'uncategorized',
             thumbnailUrl: response.document.thumbnail_path 
-              ? `http://localhost:5000${response.document.thumbnail_path}` 
+              ? getFileUrl(response.document.thumbnail_path) 
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
             // Document path for preview
             previewUrl: response.document.document_path
-              ? `http://localhost:5000${response.document.document_path}`
+              ? getFileUrl(response.document.document_path)
               : null,
             sampleContent: response.document.preview_text || "This is a preview of the document. For full access, please contact us."
           };

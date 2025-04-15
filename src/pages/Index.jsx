@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
+import { getFileUrl } from '@/utils/config';
 
 // Fallback services if API call fails
 const fallbackServices = [
@@ -106,7 +107,7 @@ const Index = () => {
             description: service.description,
             icon: getServiceIcon(service.title),
             imageUrl: service.image_path 
-              ? `http://localhost:5000${service.image_path}` 
+              ? getFileUrl(service.image_path) 
               : null
           }));
           
@@ -147,10 +148,10 @@ const Index = () => {
             title: document.title,
             description: document.description,
             thumbnailUrl: document.thumbnail_path 
-              ? `http://localhost:5000${document.thumbnail_path}` 
+              ? getFileUrl(document.thumbnail_path) 
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
             previewUrl: document.document_path
-              ? `http://localhost:5000${document.document_path}`
+              ? getFileUrl(document.document_path)
               : null
           }));
           
