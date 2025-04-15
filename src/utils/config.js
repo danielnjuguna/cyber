@@ -1,5 +1,6 @@
 // API Configuration
-export const BASE_URL = 'http://localhost:5000/api';
+// Use Vite environment variable for the base URL
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'; // Fallback for safety
 
 export const API_ENDPOINTS = {
   // Auth endpoints
