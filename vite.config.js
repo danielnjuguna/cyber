@@ -1,70 +1,29 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { visualizer } from "rollup-plugin-visualizer";
-
-const isDevelopment = process.env.NODE_ENV === "development";
+import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   server: {
-    host: true,
-    port: 3000,
+    host: "::",
+    port: 8080,
     proxy: {
-      "/api": {
-        target: "http://localhost:5000",
+      '/api': {
+        target: 'http://localhost:5000',
         changeOrigin: true,
-        secure: false,
-      },
-    },
+        secure: false
+      }
+    }
   },
   plugins: [
     react(),
-    isDevelopment && visualizer({
-      open: false,
-      gzipSize: true,
-      brotliSize: true,
-    }),
-  ],
+    mode === 'development' &&
+    componentTagger(),
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  build: {
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: [
-            'react', 
-            'react-dom', 
-            'react-router-dom',
-          ],
-          ui: [
-            '@/components/ui',
-          ],
-          auth: [
-            '@/context/AuthContext',
-          ],
-          admin: [
-            './src/pages/admin/Dashboard.jsx',
-            './src/pages/admin/Services.jsx',
-            './src/pages/admin/Documents.jsx',
-            './src/pages/admin/Users.jsx',
-          ],
-          documents: [
-            './src/pages/Documents.jsx',
-            './src/pages/DocumentView.jsx',
-          ],
-          authentication: [
-            './src/pages/Login.jsx',
-            './src/pages/Signup.jsx',
-            './src/pages/ForgotPassword.jsx',
-            './src/pages/ResetPassword.jsx',
-          ],
-        },
-      },
-    },
-  },
-}); 
+})); 
