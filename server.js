@@ -154,10 +154,18 @@ app.use('/api/services', (req, res, next) => {
 
 // Serve static files from uploads directory with better error handling
 app.use('/uploads', (req, res, next) => {
-  console.log(`Serving static file: ${req.url}`);
+  console.log(`Serving static file from uploads: ${req.url}`);
+  // Try to resolve the file explicitly
+  const filePath = join(__dirname, 'uploads', req.url);
+  if (existsSync(filePath)) {
+    console.log(`File exists at: ${filePath}`);
+  } else {
+    console.log(`File does not exist at: ${filePath}`);
+  }
   next();
 }, express.static(join(__dirname, 'uploads'), {
   fallthrough: true,
+  maxAge: '1d',
   setHeaders: (res, path) => {
     console.log(`Setting headers for: ${path}`);
     // Set appropriate content type for images
@@ -170,11 +178,73 @@ app.use('/uploads', (req, res, next) => {
     } else if (path.endsWith('.doc') || path.endsWith('.docx')) {
       res.setHeader('Content-Type', 'application/msword');
     }
+    
+    // Add cache control headers
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    
+    // Add CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 }));
 
-// Add a second static path for absolute uploads path to handle path issues
-app.use('/uploads', express.static(path.resolve(__dirname, 'uploads')));
+// Add a second static path with absolute path to handle path issues
+const absoluteUploadsPath = path.resolve(__dirname, 'uploads');
+console.log(`Setting up absolute uploads path: ${absoluteUploadsPath}`);
+app.use('/uploads', express.static(absoluteUploadsPath, {
+  fallthrough: true,
+  maxAge: '1d'
+}));
+
+// Special handler for thumbnails
+app.use('/uploads/thumbnails', express.static(join(__dirname, 'uploads', 'thumbnails'), {
+  fallthrough: true,
+  maxAge: '1d',
+  setHeaders: (res, path) => {
+    console.log(`Setting headers for thumbnail: ${path}`);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
+
+// Special handler for service images
+app.use('/uploads/services', express.static(join(__dirname, 'uploads', 'services'), {
+  fallthrough: true,
+  maxAge: '1d',
+  setHeaders: (res, path) => {
+    console.log(`Setting headers for service image: ${path}`);
+    if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (path.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    }
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
+
+// Also add a direct route handler for the specific problematic files
+app.get('/uploads/thumbnails/1744737374510-passport.png', (req, res) => {
+  const filePath = join(__dirname, 'uploads', 'thumbnails', '1744737374510-passport.png');
+  console.log(`Direct file request for ${filePath}, exists: ${existsSync(filePath)}`);
+  if (existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    console.log('File not found');
+    res.status(404).send('File not found');
+  }
+});
+
+app.get('/uploads/services/1744737252857-AIDE_2.jpg', (req, res) => {
+  const filePath = join(__dirname, 'uploads', 'services', '1744737252857-AIDE_2.jpg');
+  console.log(`Direct file request for ${filePath}, exists: ${existsSync(filePath)}`);
+  if (existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    console.log('File not found');
+    res.status(404).send('File not found');
+  }
+});
 
 // Serve static files from public directory
 app.use(express.static(join(__dirname, 'public')));
@@ -286,6 +356,38 @@ const createUploadDirectories = async () => {
       const dirPath = join(uploadsDir, dir);
       await fs.mkdir(dirPath, { recursive: true });
       console.log(`Created or verified directory: ${dirPath}`);
+    }
+    
+    // Also check if any of the problematic files already exist from previous deploys
+    const filesToCheck = [
+      join(uploadsDir, 'thumbnails', '1744737374510-passport.png'),
+      join(uploadsDir, 'services', '1744737252857-AIDE_2.jpg')
+    ];
+    
+    for (const filePath of filesToCheck) {
+      if (existsSync(filePath)) {
+        console.log(`File exists: ${filePath}`);
+        // Check file permissions
+        try {
+          const stats = await fs.stat(filePath);
+          console.log(`File permissions: ${stats.mode.toString(8)}`);
+        } catch (error) {
+          console.error(`Error checking file permissions: ${error.message}`);
+        }
+      } else {
+        console.log(`File missing: ${filePath}`);
+      }
+    }
+    
+    // Verify all uploads directories are accessible
+    for (const dir of ['', ...dirs]) {
+      const dirPath = dir ? join(uploadsDir, dir) : uploadsDir;
+      try {
+        const files = await fs.readdir(dirPath);
+        console.log(`Directory ${dirPath} is readable and contains ${files.length} files`);
+      } catch (error) {
+        console.error(`Error accessing directory ${dirPath}: ${error.message}`);
+      }
     }
   } catch (error) {
     console.error('Error creating upload directories:', error);
