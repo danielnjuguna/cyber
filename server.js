@@ -7,6 +7,7 @@ import { testConnection } from './lib/db.js';
 import formidable from 'formidable';
 import path from 'path';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 
 // Load environment variables
 dotenv.config();
@@ -15,10 +16,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+// Get the port from environment variables - Render sets this automatically
 const port = process.env.PORT || 5000;
+console.log(`Using port: ${port} from environment variable: ${process.env.PORT || 'fallback 5000'}`);
 
 // Middleware
-app.use(cors());
+// Add explicit CORS configuration for Render
+app.use(cors({
+  origin: '*', // For production, you should specify allowed origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -244,7 +252,23 @@ const setupRoutes = async () => {
 
   // Add a test route
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Server is running' });
+    console.log('Health check endpoint hit');
+    res.json({ status: 'ok', message: 'Server is running', environment: process.env.NODE_ENV });
+  });
+
+  // Add a root path handler
+  app.get('/', (req, res) => {
+    console.log('Root path hit');
+    if (existsSync(join(__dirname, 'dist', 'index.html'))) {
+      res.sendFile(join(__dirname, 'dist', 'index.html'));
+    } else {
+      res.json({ 
+        status: 'ok', 
+        message: 'CyberDocs API is running',
+        dist_exists: existsSync(join(__dirname, 'dist')),
+        env: process.env.NODE_ENV
+      });
+    }
   });
 };
 
@@ -287,6 +311,7 @@ const startServer = async () => {
     // THEN serve static files and add catch-all route AFTER API routes are registered
     // --- Serve Static Frontend Files (Added for Render deployment) ---
     // Serve the built Vite assets from the 'dist' directory
+    console.log(`Checking for dist directory: ${join(__dirname, 'dist')}, exists: ${existsSync(join(__dirname, 'dist'))}`);
     app.use(express.static(join(__dirname, 'dist')));
 
     // --- Catch-all Route (Added for Render deployment) ---
@@ -297,12 +322,23 @@ const startServer = async () => {
       if (req.originalUrl.startsWith('/api/') || req.originalUrl.startsWith('/uploads/')) {
          return res.status(404).json({ message: 'Resource not found' });
       }
-      res.sendFile(join(__dirname, 'dist', 'index.html'));
+      // Check if index.html exists before sending it
+      if (existsSync(join(__dirname, 'dist', 'index.html'))) {
+        console.log(`Serving index.html for path: ${req.originalUrl}`);
+        res.sendFile(join(__dirname, 'dist', 'index.html'));
+      } else {
+        console.log(`Cannot serve index.html for path: ${req.originalUrl} - file doesn't exist`);
+        res.status(404).json({ 
+          message: 'Frontend not built properly',
+          requested_path: req.originalUrl,
+          dist_dir_exists: existsSync(join(__dirname, 'dist'))
+        });
+      }
     });
 
-    // Start listening - Modified for Render
-    app.listen(port, '0.0.0.0', () => { // Listen on 0.0.0.0
-      console.log(`Server running on port ${port}`); // Updated log message
+    // Start listening - Using environment port and 0.0.0.0 host for Render
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

@@ -8,6 +8,8 @@
     "dev:frontend": "vite",
     "dev:api": "node server.js",
     "build": "vite build",
+    "postbuild": "echo 'Build completed successfully'",
+    "start": "node server.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "reset-db": "node scripts/reset-db.js"
