@@ -18,12 +18,12 @@ export const BASE_URL = isProd
   : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
 
 export const API_ENDPOINTS = {
-  // Auth endpoints
-  LOGIN: `${BASE_URL}/auth/login`,
-  REGISTER: `${BASE_URL}/auth/register`,
-  PROFILE: `${BASE_URL}/auth/profile`,
-  REQUEST_RESET: `${BASE_URL}/auth/request-reset`,
-  RESET_PASSWORD: `${BASE_URL}/auth/reset-password`,
+  // Auth endpoints - Fixed to match backend routes
+  LOGIN: `${BASE_URL}/users/login`,
+  REGISTER: `${BASE_URL}/users/register`,
+  PROFILE: `${BASE_URL}/users/profile`,
+  REQUEST_RESET: `${BASE_URL}/users/request-reset`,
+  RESET_PASSWORD: `${BASE_URL}/users/reset-password`,
   
   // Services endpoints
   SERVICES: `${BASE_URL}/services`,
