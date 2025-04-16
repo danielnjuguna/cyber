@@ -1,7 +1,13 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone, MapPin, Github, Twitter, Instagram } from 'lucide-react';
+import { openWhatsApp } from '@/utils/contact';
 
 const Footer = () => {
+  const handleWhatsAppClick = (e) => {
+    e.preventDefault();
+    openWhatsApp("Hello, I'd like to know more about your services.", "+254710806049");
+  };
+
   return (
     <footer className="w-full py-12 bg-secondary">
       <div className="container px-4 md:px-6 mx-auto">
@@ -88,8 +94,12 @@ const Footer = () => {
               </li>
               <li className="flex items-start">
                 <Phone className="h-5 w-5 mr-2 text-primary" />
-                <a href="tel:+254710806049" className="text-muted-foreground hover:text-primary transition-all-ease">
-                  +254710806049
+                <a 
+                  href="#" 
+                  onClick={handleWhatsAppClick}
+                  className="text-muted-foreground hover:text-primary transition-all-ease cursor-pointer"
+                >
+                  +254710806049 (WhatsApp)
                 </a>
               </li>
               <li className="flex items-start">
