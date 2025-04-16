@@ -9,7 +9,7 @@ const Footer = () => {
           {/* Company Info */}
           <div className="space-y-4">
             <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-700">
-              CyberDocs
+              cyberkendos
             </h3>
             <p className="text-muted-foreground">
               Premium document services with secure previews and seamless communication.
@@ -82,19 +82,20 @@ const Footer = () => {
             <ul className="space-y-3">
               <li className="flex items-start">
                 <Mail className="h-5 w-5 mr-2 text-primary" />
-                <a href="mailto:contact@cyberdocs.com" className="text-muted-foreground hover:text-primary transition-all-ease">
-                  contact@cyberdocs.com
+                <a href="mailto:cyberkendos@gmail.com" className="text-muted-foreground hover:text-primary transition-all-ease">
+                  cyberkendos@gmail.com
                 </a>
               </li>
               <li className="flex items-start">
                 <Phone className="h-5 w-5 mr-2 text-primary" />
-                <a href="tel:+1234567890" className="text-muted-foreground hover:text-primary transition-all-ease">
-                  +254712345678
+                <a href="tel:+254710806049" className="text-muted-foreground hover:text-primary transition-all-ease">
+                  +254710806049
                 </a>
               </li>
               <li className="flex items-start">
                 <MapPin className="h-5 w-5 mr-2 text-primary" />
                 <span className="text-muted-foreground">
+                  Kawangware, Near Penda Medical Center 
                   Nairobi, Kenya
                 </span>
               </li>
@@ -105,7 +106,7 @@ const Footer = () => {
         <div className="pt-8 border-t border-border">
           <div className="flex flex-col md:flex-row justify-end items-center">
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} CyberDocs. All rights reserved.
+              &copy; {new Date().getFullYear()} CyberKendos. All rights reserved.
             </p>
             {/* <div className="flex items-center mt-4 md:mt-0">
               <p className="text-sm text-muted-foreground mr-1">

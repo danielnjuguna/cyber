@@ -58,7 +58,7 @@ const Navbar = () => {
           to="/" 
           className="text-2xl font-display font-bold text-foreground flex items-center"
         >
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-700">CyberDocs</span>
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-700">CyberKendos</span>
         </Link>
 
         {/* Desktop Navigation */}
