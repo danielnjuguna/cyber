@@ -402,7 +402,7 @@ const AdminUsers = () => {
               <Input
                 id="phone"
                 name="phone"
-                placeholder="+1234567890"
+                placeholder="+254712345678"
                 value={formData.phone}
                 onChange={handleInputChange}
               />
@@ -474,7 +474,7 @@ const AdminUsers = () => {
                 <Input
                   id="edit-phone"
                   name="phone"
-                  placeholder="+1234567890"
+                  placeholder="+254712345678"
                   value={formData.phone}
                   onChange={handleInputChange}
                 />

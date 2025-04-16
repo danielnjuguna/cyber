@@ -1,5 +1,5 @@
 // Utility for WhatsApp integration
-export const openWhatsApp = (message, phoneNumber = "+1234567890") => {
+export const openWhatsApp = (message, phoneNumber = "+254710806049") => {
   // Format the phone number correctly (remove any spaces, dashes, etc.)
   const formattedPhoneNumber = phoneNumber.replace(/\D/g, "");
   
