@@ -31,19 +31,28 @@ if (isRenderEnvironment) {
 // This is important so Render's environment variables take precedence
 if (process.env.NODE_ENV !== 'production') {
   console.log('Loading .env file (development mode)');
-dotenv.config();
+  // Check if running from dist and adjust .env path if needed
+  const potentialEnvPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env');
+  if (fs.existsSync(potentialEnvPath)) {
+    dotenv.config({ path: potentialEnvPath });
+  } else {
+    dotenv.config(); // Assume running from root in local dev
+  }
 } else {
   console.log('Using environment variables from Render (production mode)');
 }
 
 // Import core router after environment setup
-// Use the same file:// protocol approach for consistency
-// Note: Static imports cannot use dynamic paths, so we'll skip this optimization
-// and rely on the default import path. The dynamic importRoute function is what we need to fix.
-import { ourFileRouter } from './api/core.js';
+// Adjust path based on running from dist
+import { ourFileRouter } from './api/core.js'; // This should work now as it's relative to dist/server.js
 
 const __filename = fileURLToPath(import.meta.url);
+// __dirname will now be /opt/render/project/src/dist (or similar)
 const __dirname = dirname(__filename);
+// Get the actual project root directory (one level up from dist)
+const projectRoot = path.resolve(__dirname, '..'); 
+console.log(`Server running from: ${__dirname}`);
+console.log(`Project root determined as: ${projectRoot}`);
 
 const app = express();
 
@@ -68,6 +77,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from the uploads directory
+// Path needs to be relative to projectRoot, not __dirname (which is dist)
+const uploadsDirPath = path.join(projectRoot, 'uploads');
+console.log(`Serving uploads from: ${uploadsDirPath}`);
 app.use('/uploads', (req, res, next) => {
   try {
     // Decode the URL path to handle special characters in filenames
@@ -75,7 +87,7 @@ app.use('/uploads', (req, res, next) => {
     console.log(`Serving static file from uploads. Original: ${req.path}, Decoded: ${decodedPath}`);
     
     // Use the decoded path to find the file
-    const filePath = path.join(__dirname, 'uploads', decodedPath);
+    const filePath = path.join(uploadsDirPath, decodedPath);
     
     // Check if file exists
     fs.access(filePath, fs.constants.F_OK, (err) => {
@@ -93,7 +105,7 @@ app.use('/uploads', (req, res, next) => {
     console.error('Error serving static file:', error);
     return res.status(500).json({ message: 'Server error' });
   }
-}, express.static(path.join(__dirname, 'uploads'), {
+}, express.static(uploadsDirPath, {
   maxAge: '1d', // Cache static files for 1 day
   fallthrough: false,
   // Handle errors when file not found or other issues
@@ -111,7 +123,10 @@ app.use('/uploads', (req, res, next) => {
 }));
 
 // Serve static files from public directory (Keep this if you have other public assets)
-app.use(express.static(join(__dirname, 'public')));
+// Path needs to be relative to projectRoot
+const publicDirPath = path.join(projectRoot, 'public');
+console.log(`Serving public assets from: ${publicDirPath}`);
+app.use(express.static(publicDirPath));
 
 // Log requests to help with debugging
 app.use((req, res, next) => {
@@ -157,31 +172,18 @@ app.use('/api/uploadthing', (req, res) => {
   });
 });
 
-// Fix the importRoute function to look in the correct directory structure
+// Fix the importRoute function to load from dist/api
 const importRoute = async (relativePathSpecifier) => {
   try {
-    // In ES modules, we must use URL-style paths with proper file:// protocol
-    // or fully specify relative paths with ./
-    
-    // Here's the critical fix - use proper URL format for ES modules
-    let importPath;
-    
-    if (isRenderEnvironment) {
-      // When in Render, ensure we're using fully absolute paths with file:// protocol
-      // This avoids Node treating 'api' as a package name
-      const fullPath = path.resolve(__dirname, 'api', relativePathSpecifier);
-      importPath = `file://${fullPath}`;
-      console.log(`Attempting to import route from absolute path: ${importPath}`);
-    } else {
-      // When in development, use simple relative paths
-      importPath = `./api/${relativePathSpecifier}`;
-      console.log(`Attempting to import route from relative path: ${importPath}`);
-    }
-    
+    // Path is now relative to __dirname (which is dist)
+    const modulePath = path.resolve(__dirname, 'api', relativePathSpecifier);
+    const importPath = `file://${modulePath}`;
+    console.log(`Attempting to import route from dist: ${importPath}`);
+        
     const module = await import(importPath);
-  return module.default;
+    return module.default;
   } catch (err) {
-    console.error(`Failed to import route '${relativePathSpecifier}':`, err);
+    console.error(`Failed to import route '${relativePathSpecifier}' from dist:`, err);
     throw err;
   }
 };
@@ -340,8 +342,9 @@ const setupRoutes = async () => {
 };
 
 // Ensure uploads directory exists
+// Path needs to be relative to projectRoot
 const createUploadDirectories = () => {
-  const uploadsPath = path.join(__dirname, 'uploads');
+  const uploadsPath = path.join(projectRoot, 'uploads');
   const thumbnailsPath = path.join(uploadsPath, 'thumbnails');
   try {
     if (!fs.existsSync(uploadsPath)) {
@@ -359,7 +362,7 @@ const createUploadDirectories = () => {
 const startServer = async () => {
   try {
     console.log(`Starting server in ${process.env.NODE_ENV} mode`);
-    console.log(`Current directory: ${__dirname}`);
+    console.log(`Server running from directory: ${__dirname}`); // Log current dir (dist)
     console.log(`Is Render environment: ${isRenderEnvironment}`);
     
     // Test database connection
@@ -378,22 +381,22 @@ const startServer = async () => {
 
     // Serve the frontend from the build directory if we're in production
     if (process.env.NODE_ENV === 'production') {
-      // Use path.resolve to ensure correct path joining, especially in different environments
-      const distPath = path.resolve(__dirname, 'dist');
-      console.log(`Serving static files from: ${distPath}`);
+      // The distPath is now simply __dirname, as server.js is inside dist
+      const distPath = __dirname;
+      console.log(`Serving static frontend files from: ${distPath}`);
       
-      // Check if the dist directory exists
-      if (fs.existsSync(distPath)) {
-        console.log('dist directory exists, serving static files');
+      // Check if the index.html file exists within dist
+      const indexHtmlPath = path.resolve(distPath, 'index.html');
+      if (fs.existsSync(indexHtmlPath)) {
+        console.log('dist/index.html exists, serving static files');
         app.use(express.static(distPath));
         
         app.get('*', (req, res) => {
-          // Use path.resolve for consistency
-          res.sendFile(path.resolve(distPath, 'index.html'));
+          res.sendFile(indexHtmlPath);
         });
       } else {
-        console.error('ERROR: dist directory does not exist at:', distPath);
-        console.log('Current directory contains:', fs.readdirSync(__dirname));
+        console.error('ERROR: dist/index.html does not exist at:', indexHtmlPath);
+        console.log('dist directory contains:', fs.readdirSync(distPath));
       }
     }
 

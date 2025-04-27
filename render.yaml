@@ -2,8 +2,8 @@ services:
   - type: web
     name: cyberdocs
     env: node
-    buildCommand: npm cache clean --force && npm install && npm run render-build
-    startCommand: npm run check-env && npm start
+    buildCommand: npm run render-build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -15,9 +15,15 @@ services:
         value: cyberdocs-mysql.mysql.database.azure.com
       - key: DB_SSL_REJECT_UNAUTHORIZED
         value: false
+      - key: ADMIN_EMAIL
+        value: danielnjuguna9042@gmail.com
+      - key: ADMIN_PASSWORD
+        value: 123456
       # The following sensitive values should be set in the Render dashboard
       # - key: UPLOADTHING_SECRET
       #   value: <YOUR_UPLOADTHING_SECRET>
       # - key: UPLOADTHING_APP_ID
       #   value: <YOUR_UPLOADTHING_APP_ID>
-    healthCheckPath: /api/health 
+    healthCheckPath: /api/health
+    # Define the root directory for the build output if needed
+    # rootDir: dist # Usually not needed if startCommand points correctly 
