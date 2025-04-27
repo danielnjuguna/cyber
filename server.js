@@ -31,7 +31,7 @@ if (isRenderEnvironment) {
 // This is important so Render's environment variables take precedence
 if (process.env.NODE_ENV !== 'production') {
   console.log('Loading .env file (development mode)');
-  dotenv.config();
+dotenv.config();
 } else {
   console.log('Using environment variables from Render (production mode)');
 }
@@ -152,7 +152,7 @@ app.get('/api/upload-token', (req, res) => {
 // Temporarily disable UploadThing integration since it's not installed in production
 app.use('/api/uploadthing', (req, res) => {
   res.status(503).json({
-    error: true,
+        error: true, 
     message: 'UploadThing service is currently unavailable'
   });
 });
@@ -179,7 +179,7 @@ const importRoute = async (relativePathSpecifier) => {
     }
     
     const module = await import(importPath);
-    return module.default;
+  return module.default;
   } catch (err) {
     console.error(`Failed to import route '${relativePathSpecifier}':`, err);
     throw err;
@@ -215,9 +215,20 @@ const setupRoutes = async () => {
       console.log('✓ Successfully loaded contact routes');
       
       // Import files routes
-      const filesRoute = await importRoute('files/index.js');
-      app.use('/api/files', filesRoute);
-      console.log('✓ Successfully loaded files routes');
+      // Adjust to load the dynamic route file [key].js instead of index.js
+      try {
+        const filesRouteHandler = await importRoute('files/[key].js'); 
+        // Mount the handler at the base path /api/files
+        // The dynamic parameter will be handled by the route definition inside [key].js
+        app.use('/api/files', filesRouteHandler);
+        console.log('✓ Successfully loaded files routes from [key].js');
+      } catch (error) {
+        console.error(`Error loading files route 'files/[key].js':`, error);
+        // Fallback for files route
+        app.all('/api/files/:key?', (req, res) => {
+          res.status(500).json({ message: 'Files API endpoint failed to load (fallback)' });
+        });
+      }
       
       // Import UploadThing routes if not disabled
       if (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID) {
