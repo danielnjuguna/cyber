@@ -7,27 +7,56 @@ import { testConnection } from './lib/db.js';
 import path from 'path';
 import fs from 'fs';
 
-// Remove the UploadThing imports since they're causing problems in production
-// Import our core router for direct usage if needed
-// Fix the import path to handle Render's environment
-const isRenderEnv = process.env.RENDER === 'true';
-const apiPath = isRenderEnv ? './api/core.js' : './api/core.js';
-import { ourFileRouter } from './api/core.js';
+// Print all environment variables to help with debugging (without sensitive values)
+console.log('==== ENVIRONMENT INFO ====');
+console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`RENDER: ${process.env.RENDER}`);
+console.log(`PORT: ${process.env.PORT}`);
+console.log(`DB_HOST: ${process.env.DB_HOST ? 'Set' : 'Not set'}`);
+console.log(`DB_USER: ${process.env.DB_USER ? 'Set' : 'Not set'}`);
+console.log(`DB_PASSWORD: ${process.env.DB_PASSWORD ? 'Set (hidden)' : 'Not set'}`);
+console.log(`DB_NAME: ${process.env.DB_NAME ? 'Set' : 'Not set'}`);
+console.log(`UPLOADTHING_SECRET: ${process.env.UPLOADTHING_SECRET ? 'Set (hidden)' : 'Not set'}`);
 
-// Load environment variables **only if not in production**
-if (process.env.NODE_ENV !== 'production') {
-  dotenv.config();
+// IMPORTANT: Determine if we're in the Render environment
+const isRenderEnvironment = process.env.RENDER === 'true';
+
+// CRITICAL: Force production mode when on Render
+if (isRenderEnvironment) {
+  console.log('Rendering environment detected - forcing production settings');
+  process.env.NODE_ENV = 'production';
 }
+
+// Load environment variables from .env file ONLY if we're not in production
+// This is important so Render's environment variables take precedence
+if (process.env.NODE_ENV !== 'production') {
+  console.log('Loading .env file (development mode)');
+  dotenv.config();
+} else {
+  console.log('Using environment variables from Render (production mode)');
+}
+
+// Import core router after environment setup
+import { ourFileRouter } from './api/core.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 5000;
 
-// Middleware
+// CRITICAL: Use the PORT from environment variables, or fallback to 5000 for development 
+// Port 10000 is what Render expects based on your render.yaml
+const port = process.env.PORT || 5000;
+console.log(`Using port: ${port}`);
+
+// Update CORS settings to allow Render domain
 app.use(cors({
-  origin: ['http://localhost:8080', 'http://localhost:5000'],
+  origin: [
+    'http://localhost:8080', 
+    'http://localhost:5000',
+    'https://cyberdocs-app.onrender.com',  // Add your Render domain here
+    'https://cyberdocs.onrender.com'       // And any other domains you might use
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-ut-cache', 'x-ut-preflight', 'x-uploadthing-version', 'x-uploadthing-user-id', 'x-uploadthing-package']
@@ -128,18 +157,8 @@ app.use('/api/uploadthing', (req, res) => {
 // Fix the importRoute function to look in the correct directory structure
 const importRoute = async (relativePathSpecifier) => {
   try {
-    // Check if we're in Render's production environment
-    const isRender = process.env.RENDER === 'true';
-    
-    // Get the full project directory - the key fix for Render environment
-    // When in Render, server.js is in /opt/render/project/src/
-    // So we need to adjust the paths to find API files
-    let projectRoot = __dirname;
-    console.log(`Current directory: ${projectRoot}`);
-    
-    // In Render, use the current directory (which is src)
-    // Don't try to use /api at the root level
-    const apiBasePath = isRender ? './api' : './api';
+    // Check if we're in Render's production environment  
+    const apiBasePath = isRenderEnvironment ? './api' : './api';
     
     // Create path using correct directory structure
     const modulePath = path.join(apiBasePath, relativePathSpecifier);
@@ -231,7 +250,7 @@ const startServer = async () => {
   try {
     console.log(`Starting server in ${process.env.NODE_ENV} mode`);
     console.log(`Current directory: ${__dirname}`);
-    console.log(`Is Render environment: ${process.env.RENDER === 'true'}`);
+    console.log(`Is Render environment: ${isRenderEnvironment}`);
     
     // Test database connection
     await testConnection();
@@ -252,12 +271,20 @@ const startServer = async () => {
       // Use path.resolve to ensure correct path joining, especially in different environments
       const distPath = path.resolve(__dirname, 'dist');
       console.log(`Serving static files from: ${distPath}`);
-      app.use(express.static(distPath));
-
-      app.get('*', (req, res) => {
-        // Use path.resolve for consistency
-        res.sendFile(path.resolve(distPath, 'index.html'));
-      });
+      
+      // Check if the dist directory exists
+      if (fs.existsSync(distPath)) {
+        console.log('dist directory exists, serving static files');
+        app.use(express.static(distPath));
+        
+        app.get('*', (req, res) => {
+          // Use path.resolve for consistency
+          res.sendFile(path.resolve(distPath, 'index.html'));
+        });
+      } else {
+        console.error('ERROR: dist directory does not exist at:', distPath);
+        console.log('Current directory contains:', fs.readdirSync(__dirname));
+      }
     }
 
     // Update the listen log message
