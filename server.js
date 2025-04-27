@@ -387,7 +387,31 @@ const startServer = async () => {
       const indexHtmlPath = path.resolve(distPath, 'index.html');
       if (fs.existsSync(indexHtmlPath)) {
         console.log('dist/index.html exists, serving static files');
-        app.use(express.static(distPath));
+        
+        // Configure express.static with proper MIME types
+        const staticOptions = {
+          maxAge: '1d', // Cache static files for 1 day
+          setHeaders: (res, filePath) => {
+            // Ensure proper MIME types for JavaScript files
+            if (filePath.endsWith('.js')) {
+              res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+            } else if (filePath.endsWith('.jsx')) {
+              res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+            } else if (filePath.endsWith('.css')) {
+              res.setHeader('Content-Type', 'text/css; charset=UTF-8');
+            } else if (filePath.endsWith('.html')) {
+              res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+            } else if (filePath.endsWith('.json')) {
+              res.setHeader('Content-Type', 'application/json; charset=UTF-8');
+            } else if (filePath.endsWith('.svg')) {
+              res.setHeader('Content-Type', 'image/svg+xml');
+            }
+            console.log(`Serving file ${path.basename(filePath)} with Content-Type: ${res.getHeader('Content-Type')}`);
+          }
+        };
+        
+        // Serve static files with correct MIME types
+        app.use(express.static(distPath, staticOptions));
         
         app.get('*', (req, res) => {
           res.sendFile(indexHtmlPath);

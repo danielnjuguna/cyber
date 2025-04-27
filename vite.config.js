@@ -27,6 +27,19 @@ export default defineConfig(({ mode }) => ({
       "next/navigation": path.resolve(__dirname, "./src/lib/next-shims/navigation.js"),
     },
   },
+  build: {
+    // Generate JS files with standard extensions
+    rollupOptions: {
+      output: {
+        // Ensure proper extensions and formats
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+      },
+    },
+    // Ensure proper MIME types
+    assetsInlineLimit: 0, // Disable asset inlining
+  },
   optimizeDeps: {
     esbuildOptions: {
       define: {
