@@ -17,7 +17,7 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const projectRoot = dirname(__dirname); // Go one level up from the current file's directory
+// const projectRoot = dirname(__dirname); // No longer needed with import.meta.resolve
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -187,17 +187,26 @@ app.use(
 );
 // --- EDIT END ---
 
-// Import API routes
-const importRoute = async (relativePath) => {
-  const absolutePath = path.resolve(projectRoot, relativePath);
-  console.log(`Importing route from: ${absolutePath}`);
-  const module = await import(absolutePath);
-  return module.default;
+// Import API routes using import.meta.resolve
+const importRoute = async (relativePathSpecifier) => {
+  try {
+    // Construct the specifier relative to the current file (server.js)
+    // Go up one level from src, then down into the relative path
+    const specifier = `../${relativePathSpecifier}`;
+    console.log(`Resolving specifier: ${specifier} relative to ${import.meta.url}`);
+    const resolvedUrl = await import.meta.resolve(specifier);
+    console.log(`Importing route from resolved URL: ${resolvedUrl}`);
+    const module = await import(resolvedUrl);
+    return module.default;
+  } catch (err) {
+    console.error(`Failed to import route '${relativePathSpecifier}':`, err);
+    throw err; // Re-throw the error to be caught by startServer
+  }
 };
 
 // Setup API routes
 const setupRoutes = async () => {
-  // Import standard handlers (paths relative to projectRoot)
+  // Import standard handlers (paths relative to project root)
   const servicesHandler = await importRoute('api/services/index.js');
   const servicesIdHandler = await importRoute('api/services/[id].js');
   const documentsHandler = await importRoute('api/documents/index.js');
@@ -206,10 +215,10 @@ const setupRoutes = async () => {
   const usersIdHandler = await importRoute('api/users/[id].js');
   const contactHandler = await importRoute('api/contact/index.js');
   
-  // Import file handlers (path relative to projectRoot)
+  // Import file handlers (path relative to project root)
   const filesKeyHandler = await importRoute('api/files/[key].js');
   
-  // Import authentication handlers (paths relative to projectRoot)
+  // Import authentication handlers (paths relative to project root)
   const loginHandler = await importRoute('api/users/login.js');
   const registerHandler = await importRoute('api/users/register.js');
   const profileHandler = await importRoute('api/users/profile.js');
