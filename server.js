@@ -216,29 +216,18 @@ const setupRoutes = async () => {
       app.use('/api/contact', contactRoute);
       console.log('✓ Successfully loaded contact routes');
       
-      // Import files routes
-      // First try to load the dynamic route file [key].js, and if that fails, try index.js
+      // Import files routes directly from index.js without trying [key].js first
       try {
-        // First try loading [key].js
-        const filesRouteHandler = await importRoute('files/[key].js'); 
-        // Mount the handler at the base path /api/files
+        console.log('Loading files route from index.js...');
+        const filesRouteHandler = await importRoute('files/index.js');
         app.use('/api/files', filesRouteHandler);
-        console.log('✓ Successfully loaded files routes from [key].js');
+        console.log('✓ Successfully loaded files routes from index.js');
       } catch (error) {
-        console.error(`Error loading files route 'files/[key].js':`, error);
-        // Try loading index.js instead
-        try {
-          console.log('Attempting to load files/index.js as fallback...');
-          const filesRouteHandler = await importRoute('files/index.js');
-          app.use('/api/files', filesRouteHandler);
-          console.log('✓ Successfully loaded files routes from index.js');
-        } catch (indexError) {
-          console.error(`Error loading files route 'files/index.js':`, indexError);
-          // Ultimate fallback for files route
-          app.all('/api/files/:key?', (req, res) => {
-            res.status(500).json({ message: 'Files API endpoint failed to load (fallback)' });
-          });
-        }
+        console.error(`Error loading files route 'files/index.js':`, error);
+        // Fallback for files route
+        app.all('/api/files/:key?', (req, res) => {
+          res.status(500).json({ message: 'Files API endpoint failed to load (fallback)' });
+        });
       }
       
       // Import UploadThing routes if not disabled
