@@ -1,16 +1,18 @@
 services:
   - type: web
-    name: cyberdocs
+    name: cyberdocs-app
     env: node
-    buildCommand: npm run render-build
+    plan: free
+    buildCommand: npm install && npm run render-build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
       - key: RENDER
         value: true
+      - key: PORT
+        value: 5000
       - key: DB_HOST
         value: cyberdocs-mysql.mysql.database.azure.com
       - key: DB_SSL_REJECT_UNAUTHORIZED
@@ -24,6 +26,5 @@ services:
       #   value: <YOUR_UPLOADTHING_SECRET>
       # - key: UPLOADTHING_APP_ID
       #   value: <YOUR_UPLOADTHING_APP_ID>
-    healthCheckPath: /api/health
     # Define the root directory for the build output if needed
     # rootDir: dist # Usually not needed if startCommand points correctly 
