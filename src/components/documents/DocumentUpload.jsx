@@ -6,23 +6,30 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { API_ENDPOINTS } from '@/utils/config';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import UploadButtonWrapper from '@/components/ui/UploadButtonWrapper';
+import { Loader2 } from 'lucide-react';
 
 export function DocumentUpload() {
-  const [file, setFile] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+  const [category, setCategory] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [documentUploadStatus, setDocumentUploadStatus] = useState('idle');
+  const [thumbnailUploadStatus, setThumbnailUploadStatus] = useState('idle');
+  const [documentData, setDocumentData] = useState({ url: '', key: '' });
+  const [thumbnailData, setThumbnailData] = useState({ url: '', key: '' });
+  
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleFileChange = (event) => {
-    setFile(event.target.files[0]);
-  };
+  const categories = ['templates', 'legal', 'finance', 'marketing', 'other'];
 
-  const handleUpload = async (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!file || !title || !description) {
+    
+    // Validate form fields
+    if (!title || !description || !category) {
       toast({
         title: 'Error',
         description: 'Please fill in all required fields',
@@ -31,60 +38,72 @@ export function DocumentUpload() {
       return;
     }
 
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('document', file);
-    formData.append('title', title);
-    formData.append('description', description);
+    // Validate document and thumbnail uploads
+    if (!documentData.url || !documentData.key) {
+      toast({
+        title: 'Error',
+        description: 'Please upload a document',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    // Add debugging
-    console.log('Uploading document:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-      title,
-      description
-    });
+    if (!thumbnailData.url || !thumbnailData.key) {
+      toast({
+        title: 'Error',
+        description: 'Please upload a thumbnail image',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check if uploads are still in progress
+    if (documentUploadStatus === 'uploading' || thumbnailUploadStatus === 'uploading') {
+      toast({
+        title: 'Upload in Progress',
+        description: 'Please wait for all uploads to complete',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      // Bypass the api utility and use fetch directly for clearer debugging
-      const token = localStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      
-      console.log('Sending request to:', API_ENDPOINTS.DOCUMENTS);
-      console.log('With headers:', headers);
-      
-      const response = await fetch(API_ENDPOINTS.DOCUMENTS, {
-        method: 'POST',
-        headers,
-        body: formData,
+      console.log('Submitting document data:', {
+        title,
+        description,
+        category,
+        documentUrl: documentData.url,
+        documentKey: documentData.key,
+        thumbnailUrl: thumbnailData.url,
+        thumbnailKey: thumbnailData.key,
       });
-      
-      console.log('Response status:', response.status);
-      
-      let responseData;
-      const responseText = await response.text();
-      console.log('Response text:', responseText);
-      
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('Failed to parse response as JSON:', parseError);
-        throw new Error('Server response was not valid JSON. Check server logs.');
-      }
-      
-      if (!response.ok) {
-        throw new Error(responseData.message || `HTTP error! status: ${response.status}`);
-      }
-      
-      console.log('Upload response data:', responseData);
+
+      // Use the API to create the document with UploadThing URLs and keys
+      const response = await api.addDocument({
+        title,
+        description,
+        category,
+        documentUrl: documentData.url,
+        documentKey: documentData.key,
+        thumbnailUrl: thumbnailData.url,
+        thumbnailKey: thumbnailData.key,
+      });
+
+      console.log('Document created successfully:', response);
       
       toast({
         title: 'Success',
         description: 'Document uploaded successfully',
       });
       
-      navigate(`/documents/${responseData.document.id}`);
+      // Navigate to the document view page
+      if (response && response.document && response.document.id) {
+        navigate(`/documents/${response.document.id}`);
+      } else {
+        navigate('/documents');
+      }
     } catch (error) {
       console.error('Upload error:', error);
       toast({
@@ -93,12 +112,12 @@ export function DocumentUpload() {
         variant: 'destructive',
       });
     } finally {
-      setIsUploading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <form onSubmit={handleUpload} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="title">Title</Label>
         <Input
@@ -108,6 +127,7 @@ export function DocumentUpload() {
           required
         />
       </div>
+      
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <Textarea
@@ -117,18 +137,135 @@ export function DocumentUpload() {
           required
         />
       </div>
+      
       <div className="space-y-2">
-        <Label htmlFor="file">Document</Label>
-        <Input
-          id="file"
-          type="file"
-          onChange={handleFileChange}
-          required
-          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.odt,.ods,.odp"
-        />
+        <Label htmlFor="category">Category</Label>
+        <Select value={category} onValueChange={setCategory} required>
+          <SelectTrigger>
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <Button type="submit" disabled={isUploading}>
-        {isUploading ? 'Uploading...' : 'Upload Document'}
+      
+      <div className="space-y-2">
+        <Label>Document</Label>
+        <div className="flex flex-col gap-2">
+          <UploadButtonWrapper
+            endpoint="documentUploader"
+            buttonText="Upload Document"
+            onClientUploadComplete={(res) => {
+              if (res && res.length > 0) {
+                console.log("Document Upload Completed:", res);
+                setDocumentData({
+                  url: res[0].url,
+                  key: res[0].key,
+                });
+                setDocumentUploadStatus('complete');
+                toast({
+                  title: 'Success',
+                  description: 'Document uploaded successfully',
+                });
+              }
+            }}
+            onUploadError={(error) => {
+              console.error('Document Upload Error:', error);
+              setDocumentUploadStatus('error');
+              toast({
+                title: 'Upload Error',
+                description: error.message || 'Failed to upload document',
+                variant: 'destructive',
+              });
+            }}
+            onUploadBegin={() => {
+              setDocumentUploadStatus('uploading');
+            }}
+          />
+          {documentUploadStatus === 'uploading' && (
+            <p className="text-sm text-blue-500">Uploading document...</p>
+          )}
+          {documentUploadStatus === 'complete' && (
+            <p className="text-sm text-green-600">
+              Document uploaded: {documentData.url.split('/').pop()}
+            </p>
+          )}
+          {documentUploadStatus === 'error' && (
+            <p className="text-sm text-red-500">Document upload failed.</p>
+          )}
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label>Thumbnail</Label>
+        <div className="flex flex-col gap-2">
+          <UploadButtonWrapper
+            endpoint="imageUploader"
+            buttonText="Upload Thumbnail"
+            onClientUploadComplete={(res) => {
+              if (res && res.length > 0) {
+                console.log("Thumbnail Upload Completed:", res);
+                setThumbnailData({
+                  url: res[0].url,
+                  key: res[0].key,
+                });
+                setThumbnailUploadStatus('complete');
+                toast({
+                  title: 'Success',
+                  description: 'Thumbnail uploaded successfully',
+                });
+              }
+            }}
+            onUploadError={(error) => {
+              console.error('Thumbnail Upload Error:', error);
+              setThumbnailUploadStatus('error');
+              toast({
+                title: 'Upload Error',
+                description: error.message || 'Failed to upload thumbnail',
+                variant: 'destructive',
+              });
+            }}
+            onUploadBegin={() => {
+              setThumbnailUploadStatus('uploading');
+            }}
+          />
+          {thumbnailUploadStatus === 'uploading' && (
+            <p className="text-sm text-blue-500">Uploading thumbnail...</p>
+          )}
+          {thumbnailUploadStatus === 'complete' && (
+            <div className="mt-2">
+              <p className="text-sm text-green-600 mb-1">Thumbnail uploaded successfully</p>
+              <img 
+                src={thumbnailData.url} 
+                alt="Thumbnail preview" 
+                className="h-20 w-auto object-contain border rounded" 
+              />
+            </div>
+          )}
+          {thumbnailUploadStatus === 'error' && (
+            <p className="text-sm text-red-500">Thumbnail upload failed.</p>
+          )}
+        </div>
+      </div>
+      
+      <Button 
+        type="submit" 
+        disabled={isSubmitting || documentUploadStatus === 'uploading' || thumbnailUploadStatus === 'uploading'}
+        className="w-full"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Uploading...
+          </>
+        ) : (
+          'Upload Document'
+        )}
       </Button>
     </form>
   );

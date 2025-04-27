@@ -1,13 +1,17 @@
+// Remove local file system dependencies
+// import fs from 'fs/promises';
+// import path from 'path';
+// import { fileURLToPath } from 'url';
+// import { dirname } from 'path';
+
+// Import only what we need
 import jwt from 'jsonwebtoken';
 import { pool } from '../../lib/db.js';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { deleteFile } from '../core.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const uploadsDir = path.join(dirname(dirname(__dirname)), 'uploads');
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = dirname(__filename);
+// const uploadsDir = path.join(dirname(dirname(__dirname)), 'uploads');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
@@ -36,79 +40,6 @@ async function checkAdminAuth(req, res) {
   }
 }
 
-// --- Helper to save file locally ---
-async function saveFileLocally(file, type) {
-  try {
-    // Debug received file object structure
-    console.log(`File object for ${type}:`, file);
-    
-    // Check if file is an array (formidable v3+ structure)
-    const fileObj = Array.isArray(file) ? file[0] : file;
-    
-    if (!fileObj || !fileObj.filepath) {
-      throw new Error(`Invalid file object for ${type}`);
-    }
-    
-    // Create directory if it doesn't exist
-    const targetDir = path.join(uploadsDir, 'services');
-    await fs.mkdir(targetDir, { recursive: true });
-    
-    // Get original filename and sanitize it
-    const originalName = fileObj.originalFilename 
-      ? fileObj.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') 
-      : `${Date.now()}.${fileObj.mimetype?.split('/')[1] || 'file'}`;
-            
-    // Generate a unique filename to avoid collisions
-    const uniqueFilename = `${Date.now()}-${originalName}`;
-    const targetPath = path.join(targetDir, uniqueFilename);
-    
-    // Copy the file from the temp location to our uploads directory
-    await fs.copyFile(fileObj.filepath, targetPath);
-    console.log(`File saved to ${targetPath}`);
-    
-    // Return the path that will be stored in the database and used in URLs
-    // Make sure to use / instead of \ for web URLs even on Windows
-    const webPath = `/uploads/services/${uniqueFilename}`;
-    console.log(`Web path for file: ${webPath}`);
-    return webPath;
-  } catch (error) {
-    console.error(`File save error for ${type}:`, error);
-    throw new Error(`Failed to save ${type}: ${error.message}`);
-  }
-}
-
-// --- Helper to delete file locally ---
-async function deleteFileLocally(filePath) {
-  if (!filePath) return; // Nothing to delete
-  
-  try {
-    // Convert the URL path to a file system path
-    if (filePath.startsWith('/')) {
-      filePath = filePath.substring(1);
-    }
-    
-    // Create the full path to the file
-    const fullPath = path.join(dirname(dirname(__dirname)), filePath);
-    console.log(`Attempting to delete file: ${fullPath}`);
-    
-    // Check if file exists before deleting
-    try {
-      await fs.access(fullPath);
-      await fs.unlink(fullPath);
-      console.log(`Successfully deleted file: ${fullPath}`);
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        console.log(`File not found, no need to delete: ${fullPath}`);
-      } else {
-        throw err;
-      }
-    }
-  } catch (deleteError) {
-    console.error(`Failed to delete file (${filePath}):`, deleteError);
-    // Log error, but don't fail the main request
-  }
-}
-
 // --- Main Handler ---
 export default async function handler(req, res) {
   const { id } = req.query;
@@ -123,8 +54,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       console.log(`GET /api/services/${serviceId} request`);
+      // Select URL/Key columns
       const [services] = await pool.execute(
-        'SELECT * FROM services WHERE id = ?', 
+        'SELECT id, title, description, long_description, image_url, image_key, created_at, updated_at FROM services WHERE id = ?', 
         [serviceId]
       );
       
@@ -146,74 +78,93 @@ export default async function handler(req, res) {
     
     try {
       console.log(`PUT /api/services/${serviceId} request (admin)`);
-      console.log('Request body:', req.body);
-      console.log('Request files:', req.files);
+      // Expecting JSON payload
+      const { 
+        title, 
+        description, 
+        long_description, 
+        imageUrl, 
+        imageKey 
+      } = req.body;
       
-      // Extract form fields
-      const title = Array.isArray(req.body.title) ? req.body.title[0] : req.body.title;
-      const description = Array.isArray(req.body.description) ? req.body.description[0] : req.body.description;
-      const longDescription = Array.isArray(req.body.long_description) ? req.body.long_description[0] : req.body.long_description;
-      
-      // Check if files object exists and has image property
-      const hasImageFile = req.files && req.files.image && Array.isArray(req.files.image) && req.files.image.length > 0;
-      
-      console.log('Has image file?', hasImageFile);
-      
+      console.log('Received payload for update:', req.body);
+
       // Validate required fields
       if (!title || !description) {
         return res.status(400).json({ message: 'Title and description are required' });
       }
+      // If URL is present, key should be too
+       if (imageUrl && !imageKey) return res.status(400).json({ message: 'Image Key is missing.' });
       
-      // Get current service data
+      // 1. Get current service data (including old key)
       const [currentServices] = await pool.execute(
-        'SELECT image_path FROM services WHERE id = ?',
+        'SELECT image_key FROM services WHERE id = ?',
         [serviceId]
       );
       
       if (!currentServices || currentServices.length === 0) {
-        return res.status(404).json({ message: 'Service not found' });
+        return res.status(404).json({ message: 'Service not found for update.' });
       }
       
-      const oldImagePath = currentServices[0].image_path;
-      let newImagePath = oldImagePath;
-      let imageToDelete = null;
+      const oldService = currentServices[0];
+      console.log('Old image key:', oldService.image_key);
       
-      // Handle new image upload if provided
-      if (hasImageFile) {
-        try {
-          newImagePath = await saveFileLocally(req.files.image, 'image');
-          imageToDelete = oldImagePath; // Mark old image for deletion
-        } catch (error) {
-          return res.status(500).json({ 
-            message: error.message || 'Failed to save image file'
-          });
-        }
+      // 2. Update database with new data
+      const updateFields = [];
+      const updateParams = [];
+
+      if (title) { updateFields.push('title = ?'); updateParams.push(title); }
+      if (description) { updateFields.push('description = ?'); updateParams.push(description); }
+      if (long_description !== undefined) { updateFields.push('long_description = ?'); updateParams.push(long_description || null); }
+      // Only update URL/Key if a new one was provided
+      if (imageUrl !== undefined) { updateFields.push('image_url = ?'); updateParams.push(imageUrl || null); }
+      if (imageKey !== undefined) { updateFields.push('image_key = ?'); updateParams.push(imageKey || null); }
+
+      if (updateFields.length === 0) {
+          return res.status(400).json({ message: 'No fields provided for update.' });
       }
-      
-      // Update database with correct schema fields
-      const [updateResult] = await pool.execute(
-        'UPDATE services SET title = ?, description = ?, long_description = ?, image_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [
-          title,
-          description,
-          longDescription || null,
-          newImagePath,
-          serviceId
-        ]
-      );
+
+      updateParams.push(serviceId); // For WHERE clause
+      const updateQuery = `UPDATE services SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+
+      console.log('Executing DB Update:', updateQuery, updateParams);
+      const [updateResult] = await pool.execute(updateQuery, updateParams);
       
       if (updateResult.affectedRows === 0) {
-        return res.status(404).json({ message: 'Service not found during update' });
+        return res.status(404).json({ message: 'Service not found or no changes made.' });
+      }
+      console.log('Service updated successfully in DB.');
+      
+      // 3. Delete old image from UploadThing if replaced
+      // Normalize both keys before comparison to ensure proper matching
+      const normalizeKey = (key) => key ? key.trim() : null;
+      const oldKey = normalizeKey(oldService.image_key);
+      const newKey = normalizeKey(imageKey);
+      
+      const keyToDelete = (newKey !== undefined && oldKey && oldKey !== newKey) 
+                          ? oldKey 
+                          : null;
+
+      if (keyToDelete) {
+          console.log('Attempting to delete old image from UploadThing:', keyToDelete);
+          try {
+              // Use the direct helper function instead of API call
+              const deleteResult = await deleteFile(keyToDelete);
+              console.log('Direct file deletion result:', deleteResult);
+              
+              // Log warning only if there was an explicit failure
+              if (!deleteResult.success) {
+                  console.warn('Warning while deleting old image:', keyToDelete, deleteResult);
+              }
+          } catch (error) {
+              console.error('Error deleting file:', error);
+              // Log error but don't fail the request
+          }
       }
       
-      // Delete old image file if replaced
-      if (imageToDelete) {
-        await deleteFileLocally(imageToDelete);
-      }
-      
-      // Fetch updated service
+      // 4. Fetch updated service
       const [updatedServiceData] = await pool.execute(
-        'SELECT * FROM services WHERE id = ?',
+        'SELECT id, title, description, long_description, image_url, image_key, created_at, updated_at FROM services WHERE id = ?',
         [serviceId]
       );
       
@@ -223,6 +174,7 @@ export default async function handler(req, res) {
       });
     } catch (error) {
       console.error(`Update service ${serviceId} error:`, error);
+      if (error.sqlMessage) console.error('SQL Error:', error.sqlMessage);
       return res.status(500).json({ message: 'Server error updating service' });
     }
   } 
@@ -235,36 +187,49 @@ export default async function handler(req, res) {
     try {
       console.log(`DELETE /api/services/${serviceId} request (admin)`);
       
-      // Get service data to retrieve file path before deletion
+      // 1. Get service key before deletion
       const [services] = await pool.execute(
-        'SELECT image_path FROM services WHERE id = ?',
+        'SELECT image_key FROM services WHERE id = ?',
         [serviceId]
       );
       
       if (!services || services.length === 0) {
-        return res.status(404).json({ message: 'Service not found' });
+        return res.status(404).json({ message: 'Service not found for deletion.' });
       }
       
-      const imagePathToDelete = services[0].image_path;
+      // Normalize key for consistent handling
+      const normalizeKey = (key) => key ? key.trim() : null;
+      const keyToDelete = normalizeKey(services[0].image_key);
       
-      // Delete record from database
-      const [deleteResult] = await pool.execute(
-        'DELETE FROM services WHERE id = ?', 
-        [serviceId]
-      );
+      // 2. Delete record from database
+      const [deleteResult] = await pool.execute('DELETE FROM services WHERE id = ?', [serviceId]);
       
       if (deleteResult.affectedRows === 0) {
-        return res.status(404).json({ message: 'Service not found or already deleted' });
+        return res.status(404).json({ message: 'Service not found or already deleted.' });
       }
-      
-      // Delete image file if exists
-      if (imagePathToDelete) {
-        await deleteFileLocally(imagePathToDelete);
+       console.log(`Service ${serviceId} deleted from DB.`);
+
+      // 3. Delete image from UploadThing
+      if (keyToDelete) {
+          console.log('Attempting to delete image from UploadThing:', keyToDelete);
+          try {
+              // Use direct helper function 
+              const deleteResult = await deleteFile(keyToDelete);
+              console.log('File deletion result:', deleteResult);
+              
+              if (!deleteResult.success) {
+                  console.warn('Warning while deleting service image:', keyToDelete, deleteResult);
+              }
+          } catch (error) {
+              console.error('Error deleting file:', error);
+              // Log error but don't fail request
+          }
       }
       
       return res.status(200).json({ message: 'Service deleted successfully' });
     } catch (error) {
       console.error(`Delete service ${serviceId} error:`, error);
+      if (error.sqlMessage) console.error('SQL Error:', error.sqlMessage);
       return res.status(500).json({ message: 'Server error deleting service' });
     }
   } else {

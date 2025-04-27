@@ -1,13 +1,5 @@
 import jwt from 'jsonwebtoken';
 import { pool } from '../../lib/db.js';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const uploadsDir = path.join(dirname(dirname(__dirname)), 'uploads');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
@@ -36,47 +28,6 @@ async function checkAdminAuth(req, res) {
   }
 }
 
-// --- Helper to save file locally ---
-async function saveFileLocally(file, type) {
-  try {
-    // Debug received file object structure
-    console.log(`File object for ${type}:`, file);
-    
-    // Check if file is an array (formidable v3+ structure)
-    const fileObj = Array.isArray(file) ? file[0] : file;
-    
-    if (!fileObj || !fileObj.filepath) {
-      throw new Error(`Invalid file object for ${type}`);
-    }
-    
-    // Create directory if it doesn't exist
-    const targetDir = path.join(uploadsDir, type === 'thumbnail' ? 'thumbnails' : 'documents');
-    await fs.mkdir(targetDir, { recursive: true });
-    
-    // Get original filename and sanitize it
-    const originalName = fileObj.originalFilename 
-      ? fileObj.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_') 
-      : `${Date.now()}.${fileObj.mimetype?.split('/')[1] || 'file'}`;
-            
-    // Generate a unique filename to avoid collisions
-    const uniqueFilename = `${Date.now()}-${originalName}`;
-    const targetPath = path.join(targetDir, uniqueFilename);
-    
-    // Copy the file from the temp location to our uploads directory
-    await fs.copyFile(fileObj.filepath, targetPath);
-    console.log(`File saved to ${targetPath}`);
-    
-    // Return the path that will be stored in the database and used in URLs
-    // Make sure to use / instead of \ for web URLs even on Windows
-    const webPath = `/uploads/${type === 'thumbnail' ? 'thumbnails' : 'documents'}/${uniqueFilename}`;
-    console.log(`Web path for file: ${webPath}`);
-    return webPath;
-  } catch (error) {
-    console.error(`File save error for ${type}:`, error);
-    throw new Error(`Failed to save ${type}: ${error.message}`);
-  }
-}
-
 // --- Main Handler ---
 export default async function handler(req, res) {
 
@@ -84,7 +35,7 @@ export default async function handler(req, res) {
     // --- Handle GET: Get all documents (Public, with filter/search) ---
     try {
       console.log('GET /api/documents request', req.query);
-      let query = 'SELECT id, title, description, document_path, thumbnail_path, preview_text, category, created_at, updated_at FROM documents';
+      let query = 'SELECT id, title, description, document_url, document_key, document_path, thumbnail_url, thumbnail_key, category, created_at, updated_at FROM documents';
       const params = [];
       const conditions = [];
 
@@ -124,64 +75,54 @@ export default async function handler(req, res) {
 
     try {
       console.log('POST /api/documents request (admin)');
-      console.log('Request body:', req.body);
-      console.log('Request files:', req.files);
-      
-      // Extract form fields - formidable v3+ provides arrays for fields
-      const title = Array.isArray(req.body.title) ? req.body.title[0] : req.body.title;
-      const description = Array.isArray(req.body.description) ? req.body.description[0] : req.body.description;
-      const preview_text = Array.isArray(req.body.preview_text) ? req.body.preview_text[0] : req.body.preview_text;
-      const category = Array.isArray(req.body.category) ? req.body.category[0] : req.body.category;
-      
-      // Extract files - formidable structure is different than expected
-      const documentFile = req.files.document; // In formidable v3+, this is an array
-      const thumbnailFile = req.files.thumbnail;
+      // Expecting JSON payload now
+      const { 
+        title, 
+        description, 
+        category, 
+        documentUrl, 
+        documentKey, 
+        thumbnailUrl, 
+        thumbnailKey 
+      } = req.body;
 
+      console.log('Received payload:', req.body);
+
+      // Basic validation
       if (!title || !description) {
         return res.status(400).json({ message: 'Title and description are required.' });
       }
-      
-      if (!documentFile || !documentFile.length) {
-          return res.status(400).json({ message: 'Document file is required.' });
+      if (!documentUrl || !documentKey) {
+         return res.status(400).json({ message: 'Document URL and Key are required.' });
       }
+      // Thumbnail is optional, but if URL is present, Key should be too (usually)
+       if (thumbnailUrl && !thumbnailKey) {
+         console.warn('Thumbnail URL provided but Key is missing. Proceeding, but this might indicate an issue.');
+       }
 
-      let documentPath = null;
-      let thumbnailPath = null;
-
-      // Upload document file - now saving locally
-      try {
-        documentPath = await saveFileLocally(documentFile, 'document');
-      } catch (error) {
-          return res.status(500).json({ message: error.message || 'Failed to save document.' });
-      }
-
-      // Upload thumbnail file if present - now saving locally
-      if (thumbnailFile && thumbnailFile.length) {
-          try {
-              thumbnailPath = await saveFileLocally(thumbnailFile, 'thumbnail');
-          } catch (error) {
-              console.error('Thumbnail save failed, proceeding without it:', error.message);
-          }
-      }
-
-      // Save document details to the database
+      // Save document details to the database with URLs and Keys
+      // Added document_path to match database schema requirements
       const [result] = await pool.execute(
-        'INSERT INTO documents (title, description, document_path, thumbnail_path, preview_text, category) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO documents (title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [
             title,
             description,
-            documentPath, // The local file path
-            thumbnailPath, // The local file path or null
-            preview_text || null,
-            category || 'other' // Default category
+            category || 'other', // Default category
+            documentUrl,
+            documentKey,
+            documentUrl, // Set document_path to same value as documentUrl
+            thumbnailUrl || null, // Store null if no thumbnail provided
+            thumbnailKey || null
         ]
       );
 
       const newDocumentId = result.insertId;
+      console.log(`Document created with ID: ${newDocumentId}`);
 
       // Fetch the created document to return it
       const [newDocumentData] = await pool.execute(
-        'SELECT * FROM documents WHERE id = ?',
+        // Include document_path in the selection
+        'SELECT id, title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
         [newDocumentId]
       );
 
