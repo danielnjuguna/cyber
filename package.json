@@ -9,7 +9,7 @@
     "dev:api": "node server.js",
     "build": "vite build",
     "start": "node server.js",
-    "render-build": "npm cache clean --force && npm install uploadthing && vite build && mkdir -p dist/api && cp -r api/* dist/api/ && echo 'File structure after build:' && ls -la ./dist && ls -la ./dist/api",
+    "render-build": "npm cache clean --force && npm install uploadthing && vite build && mkdir -p dist/api && cp -r api/* dist/api/ && cp -r lib dist/ && echo 'File structure after build:' && ls -la ./dist && ls -la ./dist/api",
     "check-env": "node check-env.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
