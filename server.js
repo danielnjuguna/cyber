@@ -14,8 +14,10 @@ const isRenderEnv = process.env.RENDER === 'true';
 const apiPath = isRenderEnv ? './api/core.js' : './api/core.js';
 import { ourFileRouter } from './api/core.js';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables **only if not in production**
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -247,15 +249,20 @@ const startServer = async () => {
 
     // Serve the frontend from the build directory if we're in production
     if (process.env.NODE_ENV === 'production') {
-      app.use(express.static(path.join(__dirname, 'dist')));
-      
+      // Use path.resolve to ensure correct path joining, especially in different environments
+      const distPath = path.resolve(__dirname, 'dist');
+      console.log(`Serving static files from: ${distPath}`);
+      app.use(express.static(distPath));
+
       app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+        // Use path.resolve for consistency
+        res.sendFile(path.resolve(distPath, 'index.html'));
       });
     }
 
-    app.listen(port, () => {
-      console.log(`Server listening at http://localhost:${port}`);
+    // Update the listen log message
+    app.listen(port, '0.0.0.0', () => { // Listen on 0.0.0.0 for Render
+      console.log(`Server listening on port ${port}`); // More generic message
     });
   } catch (error) {
     console.error('Failed to start server:', error);
