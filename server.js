@@ -17,6 +17,7 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const projectRoot = dirname(__dirname); // Go one level up from the current file's directory
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -187,31 +188,33 @@ app.use(
 // --- EDIT END ---
 
 // Import API routes
-const importRoute = async (path) => {
-  const module = await import(path);
+const importRoute = async (relativePath) => {
+  const absolutePath = path.resolve(projectRoot, relativePath);
+  console.log(`Importing route from: ${absolutePath}`);
+  const module = await import(absolutePath);
   return module.default;
 };
 
 // Setup API routes
 const setupRoutes = async () => {
-  // Import standard handlers
-  const servicesHandler = await importRoute('./api/services/index.js');
-  const servicesIdHandler = await importRoute('./api/services/[id].js');
-  const documentsHandler = await importRoute('./api/documents/index.js');
-  const documentsIdHandler = await importRoute('./api/documents/[id].js');
-  const usersHandler = await importRoute('./api/users/index.js');
-  const usersIdHandler = await importRoute('./api/users/[id].js');
-  const contactHandler = await importRoute('./api/contact/index.js');
+  // Import standard handlers (paths relative to projectRoot)
+  const servicesHandler = await importRoute('api/services/index.js');
+  const servicesIdHandler = await importRoute('api/services/[id].js');
+  const documentsHandler = await importRoute('api/documents/index.js');
+  const documentsIdHandler = await importRoute('api/documents/[id].js');
+  const usersHandler = await importRoute('api/users/index.js');
+  const usersIdHandler = await importRoute('api/users/[id].js');
+  const contactHandler = await importRoute('api/contact/index.js');
   
-  // Import file handlers
-  const filesKeyHandler = await importRoute('./api/files/[key].js');
+  // Import file handlers (path relative to projectRoot)
+  const filesKeyHandler = await importRoute('api/files/[key].js');
   
-  // Import authentication handlers
-  const loginHandler = await importRoute('./api/users/login.js');
-  const registerHandler = await importRoute('./api/users/register.js');
-  const profileHandler = await importRoute('./api/users/profile.js');
-  const requestResetHandler = await importRoute('./api/users/request-reset.js');
-  const resetPasswordHandler = await importRoute('./api/users/reset-password.js');
+  // Import authentication handlers (paths relative to projectRoot)
+  const loginHandler = await importRoute('api/users/login.js');
+  const registerHandler = await importRoute('api/users/register.js');
+  const profileHandler = await importRoute('api/users/profile.js');
+  const requestResetHandler = await importRoute('api/users/request-reset.js');
+  const resetPasswordHandler = await importRoute('api/users/reset-password.js');
 
   // Convert serverless functions to Express middleware
   const toExpressHandler = (handler) => async (req, res) => {
