@@ -37,6 +37,9 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Import core router after environment setup
+// Use the same file:// protocol approach for consistency
+// Note: Static imports cannot use dynamic paths, so we'll skip this optimization
+// and rely on the default import path. The dynamic importRoute function is what we need to fix.
 import { ourFileRouter } from './api/core.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -157,14 +160,25 @@ app.use('/api/uploadthing', (req, res) => {
 // Fix the importRoute function to look in the correct directory structure
 const importRoute = async (relativePathSpecifier) => {
   try {
-    // Check if we're in Render's production environment  
-    const apiBasePath = isRenderEnvironment ? './api' : './api';
+    // In ES modules, we must use URL-style paths with proper file:// protocol
+    // or fully specify relative paths with ./
     
-    // Create path using correct directory structure
-    const modulePath = path.join(apiBasePath, relativePathSpecifier);
-    console.log(`Attempting to import route from: ${path.resolve(modulePath)}`);
+    // Here's the critical fix - use proper URL format for ES modules
+    let importPath;
     
-    const module = await import(modulePath);
+    if (isRenderEnvironment) {
+      // When in Render, ensure we're using fully absolute paths with file:// protocol
+      // This avoids Node treating 'api' as a package name
+      const fullPath = path.resolve(__dirname, 'api', relativePathSpecifier);
+      importPath = `file://${fullPath}`;
+      console.log(`Attempting to import route from absolute path: ${importPath}`);
+    } else {
+      // When in development, use simple relative paths
+      importPath = `./api/${relativePathSpecifier}`;
+      console.log(`Attempting to import route from relative path: ${importPath}`);
+    }
+    
+    const module = await import(importPath);
     return module.default;
   } catch (err) {
     console.error(`Failed to import route '${relativePathSpecifier}':`, err);
