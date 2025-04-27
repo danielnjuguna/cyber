@@ -391,7 +391,11 @@ const startServer = async () => {
         // Configure express.static with proper MIME types
         const staticOptions = {
           maxAge: '1d', // Cache static files for 1 day
+          etag: true, // Enable etag for better caching
           setHeaders: (res, filePath) => {
+            // Set Cache-Control for all static files
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            
             // Ensure proper MIME types for JavaScript files
             if (filePath.endsWith('.js')) {
               res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
@@ -405,15 +409,53 @@ const startServer = async () => {
               res.setHeader('Content-Type', 'application/json; charset=UTF-8');
             } else if (filePath.endsWith('.svg')) {
               res.setHeader('Content-Type', 'image/svg+xml');
+            } else if (filePath.endsWith('.png')) {
+              res.setHeader('Content-Type', 'image/png');
+            } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+              res.setHeader('Content-Type', 'image/jpeg');
+            } else if (filePath.endsWith('.gif')) {
+              res.setHeader('Content-Type', 'image/gif');
+            } else if (filePath.endsWith('.webp')) {
+              res.setHeader('Content-Type', 'image/webp');
+            } else if (filePath.endsWith('.woff')) {
+              res.setHeader('Content-Type', 'font/woff');
+            } else if (filePath.endsWith('.woff2')) {
+              res.setHeader('Content-Type', 'font/woff2');
+            } else if (filePath.endsWith('.ttf')) {
+              res.setHeader('Content-Type', 'font/ttf');
             }
-            console.log(`Serving file ${path.basename(filePath)} with Content-Type: ${res.getHeader('Content-Type')}`);
+            
+            // Log to help with debugging
+            const contentType = res.getHeader('Content-Type');
+            if (contentType) {
+              console.log(`Serving ${path.basename(filePath)} with Content-Type: ${contentType}`);
+            } else {
+              console.warn(`No Content-Type set for ${path.basename(filePath)}`);
+            }
           }
         };
         
-        // Serve static files with correct MIME types
-        app.use(express.static(distPath, staticOptions));
+        // Important: First serve all the static assets
+        // Vite hashed assets (JS, CSS, images)
+        app.use('/assets', express.static(path.join(distPath, 'assets'), staticOptions));
         
+        // Other static assets that might be at the root level
+        const staticFileExtensions = ['.js', '.css', '.ico', '.png', '.svg', '.jpg', '.jpeg', '.gif', '.webp', '.woff', '.woff2', '.ttf'];
+        app.get('*', (req, res, next) => {
+          // Check if the request is for a file with a static file extension
+          if (staticFileExtensions.some(ext => req.path.endsWith(ext))) {
+            const filePath = path.join(distPath, req.path);
+            // Check if the file exists
+            if (fs.existsSync(filePath)) {
+              return res.sendFile(filePath);
+            }
+          }
+          next();
+        });
+        
+        // After static files, the catch-all for SPA routing - MUST be last
         app.get('*', (req, res) => {
+          console.log(`SPA route handler serving index.html for: ${req.path}`);
           res.sendFile(indexHtmlPath);
         });
       } else {
