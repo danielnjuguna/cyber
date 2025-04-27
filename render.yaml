@@ -3,8 +3,10 @@ services:
     name: cyberdocs-app
     env: node
     plan: free
+    # Build command builds into dist and copies server files into it
     buildCommand: npm install && npm run render-build
-    startCommand: npm start
+    # Start command now runs server.js from within the dist directory
+    startCommand: node dist/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -28,11 +30,12 @@ services:
       #   value: <YOUR_UPLOADTHING_APP_ID>
     # Define the root directory for the build output if needed
     # rootDir: dist # Usually not needed if startCommand points correctly 
-    staticPublishPath: ./
-    headers:
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-      - path: /assets/*
-        name: Content-Type
-        value: application/javascript; charset=utf-8 
+    # Remove staticPublishPath and headers - Express handles this now
+    # staticPublishPath: ./
+    # headers:
+    #   - path: /assets/*
+    #     name: Cache-Control
+    #     value: public, max-age=31536000, immutable
+    #   - path: /assets/*
+    #     name: Content-Type
+    #     value: application/javascript; charset=utf-8 

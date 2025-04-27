@@ -3,11 +3,14 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
-import { testConnection } from './lib/db.js';
 import path from 'path';
 import fs from 'fs';
 
-// Print all environment variables to help with debugging (without sensitive values)
+// Determine the directory name of the current module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Print all environment variables to help with debugging
 console.log('==== ENVIRONMENT INFO ====');
 console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`RENDER: ${process.env.RENDER}`);
@@ -28,46 +31,44 @@ if (isRenderEnvironment) {
 }
 
 // Load environment variables from .env file ONLY if we're not in production
-// This is important so Render's environment variables take precedence
 if (process.env.NODE_ENV !== 'production') {
   console.log('Loading .env file (development mode)');
-  // Check if running from dist and adjust .env path if needed
-  const potentialEnvPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env');
-  if (fs.existsSync(potentialEnvPath)) {
-    dotenv.config({ path: potentialEnvPath });
+  // Assume .env is in the project root (one level up from dist)
+  const envPath = path.resolve(__dirname, '../.env');
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('Loaded .env from:', envPath);
   } else {
-    dotenv.config(); // Assume running from root in local dev
+    console.warn('No .env file found at:', envPath);
+    // Fallback to potentially loading from current dir if running locally from root
+    dotenv.config(); 
   }
 } else {
   console.log('Using environment variables from Render (production mode)');
 }
 
+// Import database connection utility AFTER loading env vars
+import { testConnection } from './lib/db.js';
 // Import core router after environment setup
-// Adjust path based on running from dist
-import { ourFileRouter } from './api/core.js'; // This should work now as it's relative to dist/server.js
+// This path assumes core.js is inside `dist/api`
+import { ourFileRouter } from './api/core.js';
 
-const __filename = fileURLToPath(import.meta.url);
-// __dirname will now be /opt/render/project/src/dist (or similar)
-const __dirname = dirname(__filename);
-// Get the actual project root directory (one level up from dist)
-const projectRoot = path.resolve(__dirname, '..'); 
-console.log(`Server running from: ${__dirname}`);
-console.log(`Project root determined as: ${projectRoot}`);
+// Log the current directory where the server is running from
+console.log(`Server running from directory: ${__dirname}`);
 
 const app = express();
 
-// CRITICAL: Use the PORT from environment variables, or fallback to 5000 for development 
-// Port 10000 is what Render expects based on your render.yaml
+// Use the PORT from environment variables, fallback to 5000
 const port = process.env.PORT || 5000;
 console.log(`Using port: ${port}`);
 
-// Update CORS settings to allow Render domain
+// Update CORS settings
 app.use(cors({
   origin: [
     'http://localhost:8080', 
     'http://localhost:5000',
-    'https://cyberdocs-app.onrender.com',  // Add your Render domain here
-    'https://cyberdocs.onrender.com'       // And any other domains you might use
+    'https://cyberdocs-app.onrender.com', 
+    'https://cyberdocs.onrender.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -76,110 +77,28 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the uploads directory
-// Path needs to be relative to projectRoot, not __dirname (which is dist)
-const uploadsDirPath = path.join(projectRoot, 'uploads');
-console.log(`Serving uploads from: ${uploadsDirPath}`);
-app.use('/uploads', (req, res, next) => {
-  try {
-    // Decode the URL path to handle special characters in filenames
-    const decodedPath = decodeURIComponent(req.path);
-    console.log(`Serving static file from uploads. Original: ${req.path}, Decoded: ${decodedPath}`);
-    
-    // Use the decoded path to find the file
-    const filePath = path.join(uploadsDirPath, decodedPath);
-    
-    // Check if file exists
-    fs.access(filePath, fs.constants.F_OK, (err) => {
-      if (err) {
-        console.error(`File not found: ${filePath}`, err);
-        return res.status(404).json({ message: 'File not found' });
-      }
-      
-      // File exists, continue to serve it
-      // But we need to set req.url to the decoded path for express.static to work
-      req.url = decodedPath;
-      next();
-    });
-  } catch (error) {
-    console.error('Error serving static file:', error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}, express.static(uploadsDirPath, {
-  maxAge: '1d', // Cache static files for 1 day
-  fallthrough: false,
-  // Handle errors when file not found or other issues
-  setHeaders: (res, filePath, stat) => {
-    // Add appropriate headers based on file type
-    const ext = path.extname(filePath).slice(1).toLowerCase();
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-      res.set('Content-Type', `image/${ext === 'jpg' ? 'jpeg' : ext}`);
-    } else if (ext === 'pdf') {
-      res.set('Content-Type', 'application/pdf');
-    } else if (ext === 'docx') {
-      res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    }
-  }
-}));
-
-// Serve static files from public directory (Keep this if you have other public assets)
-// Path needs to be relative to projectRoot
-const publicDirPath = path.join(projectRoot, 'public');
-console.log(`Serving public assets from: ${publicDirPath}`);
-app.use(express.static(publicDirPath));
-
-// Log requests to help with debugging
+// Log requests
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
   next();
 });
 
-// Add an endpoint to get the UploadThing token for the client
-app.get('/api/upload-token', (req, res) => {
-  try {
-    // This is just for debugging purposes - in a real app you'd authenticate the user first
-    const token = process.env.UPLOADTHING_TOKEN;
-    if (!token) {
-      return res.status(500).json({
-        error: true,
-        message: 'UploadThing token not configured'
-      });
-    }
-    
-    res.json({
-      success: true,
-      token: token,
-      // Don't send the full token in the logs for security
-      tokenInfo: {
-        length: token.length,
-        prefix: token.substring(0, 8) + '...'
-      }
-    });
-  } catch (error) {
-    console.error('Error providing upload token:', error);
-    res.status(500).json({
-      error: true,
-      message: error.message || 'Server error retrieving upload token'
-    });
-  }
-});
+// Serve static files from the uploads directory (now relative to project root)
+const uploadsDirPath = path.join(__dirname, '../uploads'); // Adjust path relative to dist
+console.log(`Attempting to serve uploads from: ${uploadsDirPath}`);
+if (fs.existsSync(uploadsDirPath)) {
+  app.use('/uploads', express.static(uploadsDirPath));
+  console.log(`Successfully serving uploads from: ${uploadsDirPath}`);
+} else {
+  console.warn(`Uploads directory not found: ${uploadsDirPath}`);
+}
 
-// Temporarily disable UploadThing integration since it's not installed in production
-app.use('/api/uploadthing', (req, res) => {
-  res.status(503).json({
-        error: true, 
-    message: 'UploadThing service is currently unavailable'
-  });
-});
-
-// Fix the importRoute function to load from dist/api
+// Fix the importRoute function to load from the correct directory (now inside dist)
 const importRoute = async (relativePathSpecifier) => {
   try {
-    // Path is now relative to __dirname (which is dist)
-    const modulePath = path.resolve(__dirname, 'api', relativePathSpecifier);
+    const modulePath = path.resolve(__dirname, relativePathSpecifier);
     const importPath = `file://${modulePath}`;
-    console.log(`Attempting to import route from dist: ${importPath}`);
-        
+    console.log(`Attempting to import route from: ${importPath}`);
     const module = await import(importPath);
     return module.default;
   } catch (err) {
@@ -191,167 +110,54 @@ const importRoute = async (relativePathSpecifier) => {
 // Setup API routes
 const setupRoutes = async () => {
   try {
-    // Use dynamic imports to load actual API routes
-    console.log('Setting up routes with actual API handlers');
-    
-    // First, attempt to import all routes dynamically
-    try {
-      // Import users/auth routes (login, register, etc.)
-      const usersRoute = await importRoute('users/index.js');
-      app.use('/api/users', usersRoute);
-      console.log('✓ Successfully loaded users routes');
-      
-      // Import documents routes
-      const documentsRoute = await importRoute('documents/index.js');
-      app.use('/api/documents', documentsRoute);
-      console.log('✓ Successfully loaded documents routes');
-      
-      // Import services routes
-      const servicesRoute = await importRoute('services/index.js');
-      app.use('/api/services', servicesRoute);
-      console.log('✓ Successfully loaded services routes');
-      
-      // Import contact routes
-      const contactRoute = await importRoute('contact/index.js');
-      app.use('/api/contact', contactRoute);
-      console.log('✓ Successfully loaded contact routes');
-      
-      // Import files routes directly from index.js without trying [key].js first
+    console.log('Setting up API routes...');
+    // Dynamically load routes from the 'api' directory inside 'dist'
+    const apiDirs = ['users', 'documents', 'services', 'contact', 'files', 'uploadthing'];
+    for (const dir of apiDirs) {
+      const routePath = `./api/${dir}${dir === 'uploadthing' ? '.js' : '/index.js'}`;
       try {
-        console.log('Loading files route from index.js...');
-        const filesRouteHandler = await importRoute('files/index.js');
-        app.use('/api/files', filesRouteHandler);
-        console.log('✓ Successfully loaded files routes from index.js');
+        const routeHandler = await importRoute(routePath);
+        const routePrefix = `/api/${dir}`;
+        app.use(routePrefix, routeHandler);
+        console.log(`✓ Successfully loaded ${dir} routes`);
       } catch (error) {
-        console.error(`Error loading files route 'files/index.js':`, error);
-        // Fallback for files route
-        app.all('/api/files/:key?', (req, res) => {
-          res.status(500).json({ message: 'Files API endpoint failed to load (fallback)' });
+        console.error(`Error loading ${dir} route:`, error);
+        // Fallback for this specific route
+        app.all(`/api/${dir}*`, (req, res) => {
+          res.status(500).json({ message: `API endpoint for ${dir} failed to load.` });
         });
       }
-      
-      // Import UploadThing routes if not disabled
-      if (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID) {
-        try {
-          const uploadThingRoute = await importRoute('uploadthing.js');
-          app.use('/api/uploadthing', uploadThingRoute);
-          console.log('✓ Successfully loaded uploadthing routes');
-        } catch (error) {
-          console.error('Error loading UploadThing routes:', error);
-          // Fallback to temporary disabled endpoint
-          app.use('/api/uploadthing', (req, res) => {
-            res.status(503).json({
-              error: true,
-              message: 'UploadThing service is currently unavailable'
-            });
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error loading dynamic routes, falling back to simplified routes:', error);
-      
-      // Fallback to simplified routes if dynamic imports fail
-      
-      // Create a simple router for all service endpoints
-      app.all('/api/services/:id?', (req, res) => {
-        res.json({ message: 'Services API endpoint (simplified fallback)' });
-      });
-      
-      // Create a simple router for all document endpoints
-      app.all('/api/documents/:id?', (req, res) => {
-        res.json({ message: 'Documents API endpoint (simplified fallback)' });
-      });
-      
-      // Create a simple router for all user endpoints
-      app.all('/api/users/:id?', (req, res) => {
-        res.json({ message: 'Users API endpoint (simplified fallback)' });
-      });
-      
-      // Create a proper mock for the login endpoint that returns the expected structure
-      app.post('/api/users/login', (req, res) => {
-        console.log('Login attempt with:', req.body);
-        
-        // Extract credentials from request body
-        const { email, password } = req.body;
-        
-        // Check if credentials match the admin credentials
-        const isAdmin = email === process.env.ADMIN_EMAIL && 
-                       password === process.env.ADMIN_PASSWORD;
-        
-        if (isAdmin) {
-          // Return a proper user object with a role
-          res.json({
-            success: true,
-            user: {
-              id: 1,
-              email: email,
-              name: 'Admin User',
-              role: 'admin',
-              created_at: new Date().toISOString()
-            },
-            token: 'mock-jwt-token-for-testing'
-          });
-        } else {
-          // Return a staff user for testing
-          res.json({
-            success: true,
-            user: {
-              id: 2,
-              email: email,
-              name: 'Staff User',
-              role: 'staff',
-              created_at: new Date().toISOString()
-            },
-            token: 'mock-jwt-token-for-testing'
-          });
-        }
-      });
-      
-      app.post('/api/users/register', (req, res) => {
-        res.json({ success: true, message: 'Register endpoint (simplified fallback)' });
-      });
-      
-      app.all('/api/contact', (req, res) => {
-        res.json({ message: 'Contact API endpoint (simplified fallback)' });
-      });
-      
-      app.all('/api/files/:key', (req, res) => {
-        res.json({ message: 'Files API endpoint (simplified fallback)' });
-      });
     }
 
     // Add a test route
     app.get('/api/health', (req, res) => {
-      res.json({ 
-        status: 'ok', 
-        message: 'Server is running',
-        environment: {
-          NODE_ENV: process.env.NODE_ENV,
-          isRender: process.env.RENDER === 'true',
-          renderServiceDir: process.env.RENDER_PROJECT_DIR || 'not set',
-          currentDir: __dirname
-        }
-      });
+      res.json({ status: 'ok', message: 'API is healthy' });
     });
+
   } catch (error) {
-    console.error('Failed to set up routes:', error);
-    throw error;
+    console.error('Failed to set up API routes:', error);
+    // Don't throw here, let the server start but log the error
   }
 };
 
-// Ensure uploads directory exists
-// Path needs to be relative to projectRoot
+// Ensure uploads directory exists (relative to project root)
 const createUploadDirectories = () => {
-  const uploadsPath = path.join(projectRoot, 'uploads');
+  const projectRootForUploads = path.resolve(__dirname, '..');
+  const uploadsPath = path.join(projectRootForUploads, 'uploads');
   const thumbnailsPath = path.join(uploadsPath, 'thumbnails');
   try {
     if (!fs.existsSync(uploadsPath)) {
       fs.mkdirSync(uploadsPath, { recursive: true });
+      console.log(`Created uploads directory at ${uploadsPath}`);
+    } else {
+      console.log(`Uploads directory already exists at ${uploadsPath}`);
     }
     if (!fs.existsSync(thumbnailsPath)) {
       fs.mkdirSync(thumbnailsPath, { recursive: true });
+      console.log(`Created thumbnails directory at ${thumbnailsPath}`);
+    } else {
+      console.log(`Thumbnails directory already exists at ${thumbnailsPath}`);
     }
-    console.log('Uploads and thumbnails directories created or already exist.');
   } catch (error) {
     console.error('Error creating upload directories:', error);
   }
@@ -360,9 +166,8 @@ const createUploadDirectories = () => {
 const startServer = async () => {
   try {
     console.log(`Starting server in ${process.env.NODE_ENV} mode`);
-    console.log(`Server running from directory: ${__dirname}`); // Log current dir (dist)
-    console.log(`Is Render environment: ${isRenderEnvironment}`);
-    
+    console.log(`Server running from directory: ${__dirname}`);
+
     // Test database connection
     await testConnection();
     
@@ -372,115 +177,62 @@ const startServer = async () => {
     // Setup API routes
     await setupRoutes();
 
-    // Handle any remaining requests (e.g., 404 for API)
-    app.use('/api/*', (req, res) => {
-        res.status(404).json({ message: 'API endpoint not found' });
-    });
-
-    // Serve the frontend from the build directory if we're in production
+    // Serve static frontend files ONLY in production
     if (process.env.NODE_ENV === 'production') {
-      // The distPath is now simply __dirname since files are copied to the root
-      const distPath = __dirname;
-      console.log(`Serving static frontend files from: ${distPath}`);
+      // Serve static files from the current directory (__dirname, which is 'dist')
+      const staticPath = __dirname;
+      console.log(`Serving static frontend files from: ${staticPath}`);
       
-      // Look for index.html
-      const indexHtmlPath = path.resolve(distPath, 'index.html');
+      const indexHtmlPath = path.resolve(staticPath, 'index.html');
       if (fs.existsSync(indexHtmlPath)) {
-        console.log('index.html exists at:', indexHtmlPath);
-        
-        // Log the contents of the assets directory if it exists
-        const assetsPath = path.join(distPath, 'assets');
-        if (fs.existsSync(assetsPath)) {
-          console.log('Contents of assets directory:');
-          try {
-            const assetFiles = fs.readdirSync(assetsPath);
-            assetFiles.forEach(file => console.log(` - ${file}`));
-          } catch (err) {
-            console.error('Error reading assets directory:', err);
-          }
-        } else {
-          console.warn('assets directory not found at:', assetsPath);
-        }
-        
-        // Configure express.static with proper MIME types
-        const staticOptions = {
-          maxAge: '1d', // Cache static files for 1 day
-          etag: true, // Enable etag for better caching
+        console.log('index.html found at:', indexHtmlPath);
+
+        // Serve static assets from the 'assets' directory first
+        app.use('/assets', express.static(path.join(staticPath, 'assets'), {
+          maxAge: '1y', // Cache assets for a long time
+          immutable: true, // Indicate assets are immutable
           setHeaders: (res, filePath) => {
-            // Set Cache-Control for all static files
-            res.setHeader('Cache-Control', 'public, max-age=86400');
-            
-            // Ensure proper MIME types for JavaScript files
-            if (filePath.endsWith('.js')) {
-              res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
-            } else if (filePath.endsWith('.jsx')) {
+             if (filePath.endsWith('.js')) {
               res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
             } else if (filePath.endsWith('.css')) {
               res.setHeader('Content-Type', 'text/css; charset=UTF-8');
-            } else if (filePath.endsWith('.html')) {
-              res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-            } else if (filePath.endsWith('.json')) {
-              res.setHeader('Content-Type', 'application/json; charset=UTF-8');
-            } else if (filePath.endsWith('.svg')) {
-              res.setHeader('Content-Type', 'image/svg+xml');
-            } else if (filePath.endsWith('.png')) {
-              res.setHeader('Content-Type', 'image/png');
-            } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
-              res.setHeader('Content-Type', 'image/jpeg');
-            } else if (filePath.endsWith('.gif')) {
-              res.setHeader('Content-Type', 'image/gif');
-            } else if (filePath.endsWith('.webp')) {
-              res.setHeader('Content-Type', 'image/webp');
-            } else if (filePath.endsWith('.woff')) {
-              res.setHeader('Content-Type', 'font/woff');
-            } else if (filePath.endsWith('.woff2')) {
-              res.setHeader('Content-Type', 'font/woff2');
-            } else if (filePath.endsWith('.ttf')) {
-              res.setHeader('Content-Type', 'font/ttf');
             }
-            
-            // Log to help with debugging
-            const contentType = res.getHeader('Content-Type');
-            console.log(`Serving ${path.basename(filePath)} with Content-Type: ${contentType || 'not set'}`);
+            console.log(`Serving asset: ${path.basename(filePath)}`);
           }
-        };
-        
-        // Important: First serve specific directories with static content
-        // For assets (compiled JS, CSS, etc) using express.static
-        app.use('/assets', (req, res, next) => {
-          console.log(`Asset request: ${req.path}`);
-          next();
-        }, express.static(path.join(distPath, 'assets'), staticOptions));
-        
-        // Serve public directory if it exists
-        const publicDir = path.join(distPath, 'public');
-        if (fs.existsSync(publicDir)) {
-          app.use('/public', express.static(publicDir, staticOptions));
-        }
-        
-        // Explicitly serve the root static files
-        app.use(express.static(distPath, staticOptions));
-        
-        // After static files, the catch-all for SPA routing - MUST be last
+        }));
+
+        // Serve other static files from the root
+        app.use(express.static(staticPath));
+
+        // Fallback for SPA: All other GET requests return index.html
         app.get('*', (req, res) => {
+          // Avoid serving index.html for API routes
+          if (req.path.startsWith('/api/')) {
+             return res.status(404).json({ message: 'API endpoint not found' });
+          }
           console.log(`SPA route handler serving index.html for: ${req.path}`);
           res.sendFile(indexHtmlPath);
         });
       } else {
-        console.error('ERROR: index.html does not exist at:', indexHtmlPath);
-        console.log('Root directory contains:');
+        console.error('ERROR: index.html not found at:', indexHtmlPath);
+        console.log('Contents of static path directory:');
         try {
-          const files = fs.readdirSync(distPath);
+          const files = fs.readdirSync(staticPath);
           files.forEach(file => console.log(` - ${file}`));
         } catch (err) {
           console.error('Error reading directory:', err);
         }
       }
+    } else {
+      // Handle API 404s if not in production (since no frontend is served)
+      app.use('/api/*', (req, res) => {
+        res.status(404).json({ message: 'API endpoint not found' });
+      });
     }
 
-    // Update the listen log message
-    app.listen(port, '0.0.0.0', () => { // Listen on 0.0.0.0 for Render
-      console.log(`Server listening on port ${port}`); // More generic message
+    // Start the server
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`Server listening on port ${port}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
