@@ -30,3 +30,19 @@ Thumbs.db
 # UploadThing 
 uploadthing-debug.js
 **/uploadthing-debug.log
+
+# Sensitive files
+*.pem
+*-firebase-adminsdk-*.json
+
+# Data directories
+/data/
+
+# Backup files
+*.bak
+
+# Next.js shims (for compatibility)
+/src/lib/next-shims/
+
+# API files directory
+/api/files/
