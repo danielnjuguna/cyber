@@ -37,7 +37,8 @@ import {
   DialogFooter, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
+  DialogTrigger,
+  DialogClose
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -60,7 +61,8 @@ import {
 import { api, handleApiError } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { getFileUrl } from '@/utils/config';
+import { getFullUploadThingUrl } from '@/lib/uploadthing';
+import UploadButtonWrapper from '@/components/ui/UploadButtonWrapper';
 
 // Helper function to format dates to dd/mm/yyyy
 const formatDate = (dateString) => {
@@ -85,8 +87,10 @@ const AdminDocuments = () => {
     title: '',
     description: '',
     category: '',
-    document: null,
-    thumbnail: null
+    documentUrl: '',
+    documentKey: '',
+    thumbnailUrl: '',
+    thumbnailKey: ''
   });
   const [isEditing, setIsEditing] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -96,6 +100,8 @@ const AdminDocuments = () => {
   const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [documentUploadStatus, setDocumentUploadStatus] = useState('idle');
+  const [thumbnailUploadStatus, setThumbnailUploadStatus] = useState('idle');
 
   // Redirect if not authenticated or not admin
   useEffect(() => {
@@ -112,7 +118,11 @@ const AdminDocuments = () => {
         const response = await api.getDocuments();
         
         if (response.documents && Array.isArray(response.documents)) {
-          setDocuments(response.documents);
+          setDocuments(response.documents.map(doc => ({
+            ...doc,
+            documentUrl: doc.document_url || '',
+            thumbnailUrl: doc.thumbnail_url || ''
+          })));
         } else {
           setDocuments([]);
         }
@@ -173,30 +183,28 @@ const AdminDocuments = () => {
     }
   };
 
-  const handleFileChange = (e) => {
-    const { name, files } = e.target;
-    
-    // Log file selection details
-    console.log(`🔍 File selected for ${name}:`, files.length ? {
-      name: files[0].name,
-      type: files[0].type,
-      size: `${(files[0].size / 1024).toFixed(2)} KB`,
-      lastModified: new Date(files[0].lastModified).toISOString()
-    } : 'No file selected');
-    
-    setFormData(prev => ({ ...prev, [name]: files[0] }));
-  };
-
   const resetForm = () => {
     setFormData({
       id: '',
       title: '',
       description: '',
       category: '',
-      document: null,
-      thumbnail: null
+      documentUrl: '',
+      documentKey: '',
+      thumbnailUrl: '',
+      thumbnailKey: ''
     });
     setIsEditing(false);
+    setDocumentUploadStatus('idle');
+    setThumbnailUploadStatus('idle');
+    setShowCustomCategoryInput(false);
+    setCustomCategory('');
+  };
+
+  const handleAddNew = () => {
+    resetForm();
+    setIsEditing(false);
+    setIsDialogOpen(true);
   };
 
   const handleEdit = (document) => {
@@ -206,11 +214,15 @@ const AdminDocuments = () => {
       title: document.title,
       description: document.description,
       category: document.category || 'other',
-      document: null,
-      thumbnail: null
+      documentUrl: document.document_url || '',
+      documentKey: document.document_key || '',
+      thumbnailUrl: document.thumbnail_url || '',
+      thumbnailKey: document.thumbnail_key || ''
     });
     setIsEditing(true);
     setIsDialogOpen(true);
+    setDocumentUploadStatus(document.document_url ? 'complete' : 'idle');
+    setThumbnailUploadStatus(document.thumbnail_url ? 'complete' : 'idle');
   };
 
   const handleSubmit = async (e) => {
@@ -218,105 +230,72 @@ const AdminDocuments = () => {
     console.log('🔄 Form submission started');
     setIsSubmitting(true);
     
-    // If we have a custom category pending, add it first
     if (showCustomCategoryInput && customCategory.trim()) {
       addCustomCategory();
     }
     
-    try {
-      // Log current form data
-      console.log('📋 Form data at submission:', {
-        id: formData.id,
-        title: formData.title,
-        description: formData.description?.substring(0, 50) + (formData.description?.length > 50 ? '...' : ''),
-        category: formData.category,
-        hasDocument: !!formData.document,
-        hasThumbnail: !!formData.thumbnail,
-        isEditing: isEditing
-      });
-      
-      if (formData.document) {
-        console.log('📄 Document file details:', {
-          name: formData.document.name,
-          type: formData.document.type,
-          size: `${(formData.document.size / 1024).toFixed(2)} KB`,
-          lastModified: new Date(formData.document.lastModified).toISOString()
+    if (!isEditing && (!formData.documentUrl || !formData.thumbnailUrl)) {
+       toast({
+         title: 'Missing Files',
+         description: 'Please upload both a document and a thumbnail.',
+         variant: 'destructive',
+       });
+       setIsSubmitting(false);
+       return;
+    }
+    
+    if (documentUploadStatus === 'uploading' || thumbnailUploadStatus === 'uploading') {
+        toast({
+          title: 'Upload in Progress',
+          description: 'Please wait for the file uploads to complete.',
+          variant: 'destructive',
         });
-      }
-      
-      const formPayload = new FormData();
-      formPayload.append('title', formData.title);
-      formPayload.append('description', formData.description);
-      formPayload.append('category', formData.category);
-      
-      if (formData.document) {
-        console.log('📎 Appending document file to FormData');
-        formPayload.append('document', formData.document);
-      } else {
-        console.log(isEditing ? 
-          '⚠️ No document file provided for update' : 
-          '❌ No document file provided for new upload');
-      }
-      
-      if (formData.thumbnail) {
-        console.log('📎 Appending thumbnail file to FormData');
-        formPayload.append('thumbnail', formData.thumbnail);
-      }
-      
-      // Log all FormData entries
-      console.log('🔍 FormData contents:');
-      for (let pair of formPayload.entries()) {
-        const value = pair[1] instanceof File 
-          ? `File: ${pair[1].name} (${pair[1].type}, ${(pair[1].size / 1024).toFixed(2)} KB)` 
-          : pair[1];
-        console.log(`- ${pair[0]}: ${value}`);
-      }
+        setIsSubmitting(false);
+        return;
+     }
+    
+    try {
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        documentUrl: formData.documentUrl,
+        documentKey: formData.documentKey,
+        thumbnailUrl: formData.thumbnailUrl,
+        thumbnailKey: formData.thumbnailKey,
+      };
+
+      console.log('💾 Submitting payload:', payload);
 
       let response;
       if (isEditing) {
-        console.log(`🔄 Updating document with ID: ${formData.id}`);
-        response = await api.documents.update(formData.id, formPayload);
-        console.log('✅ Document update response:', response);
-        toast({
-          title: 'Success',
-          description: 'Document updated successfully',
-        });
-        
-        // Update documents list
-        setDocuments(prevDocuments => 
-          prevDocuments.map(doc => 
-            doc.id === formData.id ? { ...doc, ...response.document } : doc
-          )
-        );
+        response = await api.updateDocument(formData.id, payload);
+        setDocuments(prev => prev.map(doc =>
+          doc.id === formData.id ? { ...doc, ...payload, updated_at: new Date().toISOString() } : doc
+        ));
+        toast({ title: 'Success', description: 'Document updated successfully!' });
       } else {
-        if (!formData.document) {
-          console.error('❌ Document file is required for new uploads');
-          throw new Error('Document file is required');
-        }
-        
-        console.log('🔄 Creating new document');
-        response = await api.documents.create(formPayload);
-        console.log('✅ Document creation response:', response);
-        toast({
-          title: 'Success',
-          description: 'Document created successfully',
-        });
-        
-        // Add new document to list with properly formatted date
+        response = await api.addDocument(payload);
         const newDocument = {
-          ...response.document,
-          created_at: new Date().toISOString() // Ensure we have a valid date
-        };
-        setDocuments(prevDocuments => [...prevDocuments, newDocument]);
+           ...response.document,
+           documentUrl: response.document?.document_url || payload.documentUrl,
+           thumbnailUrl: response.document?.thumbnail_url || payload.thumbnailUrl,
+         };
+        setDocuments(prev => [newDocument, ...prev]);
+        toast({ title: 'Success', description: 'Document added successfully!' });
       }
+
+      console.log('✅ API Response:', response);
 
       resetForm();
       setIsDialogOpen(false);
+
     } catch (error) {
       console.error('❌ Form submission error:', error);
-      handleApiError(error);
+      handleApiError(error, isEditing ? 'Failed to update document' : 'Failed to add document');
     } finally {
       setIsSubmitting(false);
+      console.log('🏁 Form submission finished');
     }
   };
 
@@ -331,7 +310,6 @@ const AdminDocuments = () => {
     try {
       await api.documents.delete(documentToDelete.id);
       
-      // Remove from documents list
       setDocuments(prevDocuments => 
         prevDocuments.filter(doc => doc.id !== documentToDelete.id)
       );
@@ -358,207 +336,288 @@ const AdminDocuments = () => {
   }
 
   return (
-    <AdminLayout title="Manage Documents">
-      <Card className="mb-6">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Documents Library</CardTitle>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => { resetForm(); setIsEditing(false); }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Upload Document
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{isEditing ? 'Edit Document' : 'Upload New Document'}</DialogTitle>
-                <DialogDescription>
-                  {isEditing ? 'Update document details below.' : 'Fill in the details to upload a new document.'}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit}>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="title">Title</Label>
-                    <Input 
-                      id="title" 
-                      name="title" 
-                      value={formData.title} 
-                      onChange={handleInputChange} 
-                      required 
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea 
-                      id="description" 
-                      name="description" 
-                      value={formData.description} 
-                      onChange={handleInputChange} 
-                      required 
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value) => handleSelectChange('category', value)}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Existing Categories</SelectLabel>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category.charAt(0).toUpperCase() + category.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
+    <AdminLayout>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Manage Documents</h1>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={handleAddNew}>
+              <Plus className="mr-2 h-4 w-4" /> Add New Document
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>{isEditing ? 'Edit Document' : 'Add New Document'}</DialogTitle>
+              <DialogDescription>
+                {isEditing ? 'Update the details of the document.' : 'Fill in the details to add a new document.'}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="title" className="text-right">Title</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="description" className="text-right">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  rows={4}
+                />
+              </div>
+               <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="category" className="text-right">Category</Label>
+                <div className="col-span-3 flex flex-col gap-2">
+                  <Select
+                    name="category"
+                    value={formData.category}
+                    onValueChange={(value) => handleSelectChange('category', value)}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Standard Categories</SelectLabel>
+                        {categories.map(cat => (
+                          <SelectItem key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</SelectItem>
+                        ))}
                         <SelectSeparator />
-                        <SelectItem value="custom" className="text-primary font-medium">
-                          + Add custom category
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    
-                    {showCustomCategoryInput && (
-                      <div className="mt-2 grid grid-cols-[1fr,auto] gap-2">
-                        <Input
-                          placeholder="Enter new category name"
-                          value={customCategory}
-                          onChange={handleCustomCategoryChange}
-                          disabled={isSubmitting}
-                        />
-                        <Button 
-                          type="button" 
-                          size="sm"
-                          onClick={addCustomCategory}
-                          disabled={!customCategory.trim() || isSubmitting}
-                        >
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="document">Document File {!isEditing && <span className="text-sm text-muted-foreground">(Required for new uploads)</span>}</Label>
-                    <Input 
-                      id="document" 
-                      name="document" 
-                      type="file" 
-                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.odt,.ods,.odp" 
-                      onChange={handleFileChange} 
-                      required={!isEditing}
-                      disabled={isSubmitting}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      The document will be displayed directly in the preview with a blur effect on a portion of the content. 
-                      Supported formats include PDF, Office documents (DOC, DOCX, PPT, PPTX, XLS, XLSX), 
-                      images (JPG, PNG, GIF), text files (TXT), and OpenDocument formats.
-                    </p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="thumbnail">Thumbnail Image (Optional)</Label>
-                    <Input 
-                      id="thumbnail" 
-                      name="thumbnail" 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleFileChange}
-                      disabled={isSubmitting}
-                    />
-                  </div>
+                        <SelectItem value="custom">Add Custom Category...</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                   {showCustomCategoryInput && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Input
+                        type="text"
+                        placeholder="Enter new category name"
+                        value={customCategory}
+                        onChange={handleCustomCategoryChange}
+                        className="flex-grow"
+                      />
+                      <Button type="button" onClick={addCustomCategory} size="sm">Add</Button>
+                    </div>
+                  )}
                 </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
-                    ) : (
-                      isEditing ? 'Update Document' : 'Upload Document'
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Document File</Label>
+                <div className="col-span-3">
+                  <UploadButtonWrapper
+                    endpoint="documentUploader"
+                    buttonText="Upload Document"
+                    onClientUploadComplete={(res) => {
+                      if (res && res.length > 0) {
+                        console.log("📄 Document Upload Completed:", res);
+                        setFormData(prev => ({
+                          ...prev,
+                          documentUrl: res[0].url,
+                          documentKey: res[0].key,
+                        }));
+                        setDocumentUploadStatus('complete');
+                        toast({ title: 'Success', description: 'Document uploaded.' });
+                      } else {
+                         console.error("Document upload failed or response format incorrect:", res);
+                         setDocumentUploadStatus('error');
+                         toast({ title: 'Upload Error', description: 'Document upload failed.', variant: 'destructive'});
+                      }
+                    }}
+                    onUploadError={(error) => {
+                      console.error(`❌ Document Upload Error: ${error.message}`);
+                      setDocumentUploadStatus('error');
+                      toast({ title: 'Upload Error', description: `Document: ${error.message}`, variant: 'destructive'});
+                    }}
+                    onUploadBegin={() => {
+                       console.log("🚀 Document Upload Started");
+                       setDocumentUploadStatus('uploading');
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">You can upload any type of file (max size: 30MB)</p>
+                  {documentUploadStatus === 'uploading' && <p className="text-sm text-blue-500 mt-1">Uploading document...</p>}
+                  {documentUploadStatus === 'complete' && formData.documentUrl && (
+                    <p className="text-sm text-green-600 mt-1">
+                      Document uploaded: <a href={formData.documentUrl} target="_blank" rel="noopener noreferrer" className="underline">{formData.documentUrl.split('/').pop()}</a>
+                    </p>
+                  )}
+                   {documentUploadStatus === 'error' && <p className="text-sm text-red-500 mt-1">Document upload failed.</p>}
+                   {isEditing && formData.documentUrl && documentUploadStatus !== 'uploading' && (
+                     <p className="text-sm text-gray-500 mt-1">
+                       Current: <a href={formData.documentUrl} target="_blank" rel="noopener noreferrer" className="underline">{formData.documentUrl.split('/').pop()}</a>. Upload new to replace.
+                     </p>
+                   )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Thumbnail Image</Label>
+                <div className="col-span-3">
+                   {isEditing && formData.thumbnailUrl && thumbnailUploadStatus !== 'uploading' && (
+                    <div className="mb-2">
+                      <p className="text-sm text-gray-500 mb-1">Current Thumbnail:</p>
+                      <img
+                        src={formData.thumbnailUrl}
+                        alt="Current Thumbnail"
+                        className="h-20 w-auto rounded border"
+                      />
+                    </div>
+                   )}
+                  <UploadButtonWrapper
+                    endpoint="imageUploader"
+                    buttonText="Upload Thumbnail"
+                    onClientUploadComplete={(res) => {
+                       if (res && res.length > 0) {
+                        console.log("🖼️ Thumbnail Upload Completed:", res);
+                        setFormData(prev => ({
+                          ...prev,
+                          thumbnailUrl: res[0].url,
+                          thumbnailKey: res[0].key,
+                        }));
+                        setThumbnailUploadStatus('complete');
+                        toast({ title: 'Success', description: 'Thumbnail uploaded.' });
+                       } else {
+                         console.error("Thumbnail upload failed or response format incorrect:", res);
+                         setThumbnailUploadStatus('error');
+                         toast({ title: 'Upload Error', description: 'Thumbnail upload failed.', variant: 'destructive'});
+                       }
+                    }}
+                    onUploadError={(error) => {
+                      console.error(`❌ Thumbnail Upload Error: ${error.message}`);
+                      setThumbnailUploadStatus('error');
+                      toast({ title: 'Upload Error', description: `Thumbnail: ${error.message}`, variant: 'destructive'});
+                    }}
+                     onUploadBegin={() => {
+                       console.log("🚀 Thumbnail Upload Started");
+                       setThumbnailUploadStatus('uploading');
+                     }}
+                  />
+                   {thumbnailUploadStatus === 'uploading' && <p className="text-sm text-blue-500 mt-1">Uploading thumbnail...</p>}
+                   {thumbnailUploadStatus === 'complete' && formData.thumbnailUrl && (
+                     <p className="text-sm text-green-600 mt-1">
+                       Thumbnail updated: <a href={formData.thumbnailUrl} target="_blank" rel="noopener noreferrer" className="underline">{formData.thumbnailUrl.split('/').pop()}</a>
+                     </p>
+                   )}
+                   {thumbnailUploadStatus === 'error' && <p className="text-sm text-red-500 mt-1">Thumbnail upload failed.</p>}
+                   {isEditing && formData.thumbnailUrl && thumbnailUploadStatus !== 'uploading' && (
+                     <p className="text-sm text-gray-500 mt-1">Upload new image to replace.</p>
+                   )}
+                </div>
+              </div>
+
+              <DialogFooter>
+                <DialogClose asChild>
+                   <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
+                </DialogClose>
+                <Button type="submit" disabled={isSubmitting || documentUploadStatus === 'uploading' || thumbnailUploadStatus === 'uploading'}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {isEditing ? 'Updating...' : 'Adding...'}
+                    </>
+                  ) : (
+                    isEditing ? 'Save Changes' : 'Add Document'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Existing Documents</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8">
-              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p>Loading documents...</p>
-            </div>
-          ) : documents.length > 0 ? (
+            <p>Loading documents...</p>
+          ) : documents.length === 0 ? (
+             <p>No documents found.</p>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
+                  <TableHead>Thumbnail</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Date Added</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Updated</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {documents.map((doc) => (
                   <TableRow key={doc.id}>
-                    <TableCell className="font-medium">{doc.id}</TableCell>
-                    <TableCell>{doc.title}</TableCell>
-                    <TableCell>{doc.category || 'Uncategorized'}</TableCell>
+                    <TableCell>
+                      {doc.thumbnailUrl ? (
+                        <img
+                          src={doc.thumbnailUrl}
+                          alt={doc.title}
+                          className="h-10 w-10 object-cover rounded"
+                           onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="h-10 w-10 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">No Img</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">{doc.title}</TableCell>
+                    <TableCell>{doc.category || 'N/A'}</TableCell>
                     <TableCell>{formatDate(doc.created_at)}</TableCell>
+                    <TableCell>{formatDate(doc.updated_at)}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="mr-1" onClick={() => {
-                        const downloadUrl = getFileUrl(doc.document_path);
-                        window.open(downloadUrl, '_blank');
-                      }}>
-                        <Eye className="h-4 w-4" />
-                        <span className="sr-only">Download</span>
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(doc)} className="mr-1">
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => confirmDelete(doc)} className="text-destructive">
-                        <Trash className="h-4 w-4" />
-                        <span className="sr-only">Delete</span>
-                      </Button>
+                      <div className="flex justify-end space-x-2">
+                       {doc.documentUrl && (
+                        <Link to={`/documents/${doc.id}`} target="_blank">
+                          <Button variant="outline" size="icon">
+                              <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                       )}
+                        <Button variant="outline" size="icon" onClick={() => handleEdit(doc)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog open={showDeleteDialog && documentToDelete?.id === doc.id} onOpenChange={(open) => !open && setShowDeleteDialog(false)}>
+                          <AlertDialogTrigger asChild>
+                             <Button variant="destructive" size="icon" onClick={() => confirmDelete(doc)}>
+                              <Trash className="h-4 w-4" />
+                             </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the document "{documentToDelete?.title}".
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setDocumentToDelete(null)}>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={handleDelete} disabled={isSubmitting}>
+                                {isSubmitting ? 'Deleting...' : 'Delete'}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No documents found. Upload your first document!</p>
-            </div>
           )}
         </CardContent>
       </Card>
-      
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the document "{documentToDelete?.title}". This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AdminLayout>
   );
 };

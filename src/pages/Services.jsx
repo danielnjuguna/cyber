@@ -93,8 +93,8 @@ const Services = () => {
             description: service.description,
             longDescription: service.long_description,
             icon: getServiceIcon(service.title),
-            imageUrl: service.image_path 
-              ? getFileUrl(service.image_path)
+            imageUrl: service.image_url
+              ? getFileUrl(service.image_url)
               : 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?q=80&w=2070&auto=format&fit=crop'
           }));
           

@@ -86,8 +86,8 @@ const Documents = () => {
             id: doc.id,
             title: doc.title,
             description: doc.description,
-            thumbnailUrl: doc.thumbnail_path 
-              ? getFileUrl(doc.thumbnail_path) 
+            thumbnailUrl: doc.thumbnail_url
+              ? getFileUrl(doc.thumbnail_url)
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
             previewUrl: doc.document_path
               ? getFileUrl(doc.document_path)

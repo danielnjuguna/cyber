@@ -368,26 +368,30 @@ const AdminUsers = () => {
 
       {/* Add User Dialog */}
       <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
+            <DialogTitle className="text-2xl">Add New User</DialogTitle>
             <DialogDescription>
               Create a new user account with the details below.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+          <div className="grid gap-6 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
               <Input
                 id="email"
                 name="email"
+                type="email"
                 placeholder="user@example.com"
                 value={formData.email}
                 onChange={handleInputChange}
+                className="w-full"
               />
+              <p className="text-xs text-muted-foreground">The user will use this email to log in</p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <Input
                 id="password"
                 name="password"
@@ -395,25 +399,31 @@ const AdminUsers = () => {
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={handleInputChange}
+                className="w-full"
               />
+              <p className="text-xs text-muted-foreground">Min. 8 characters recommended</p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="phone">Phone (optional)</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-sm font-medium">Phone (optional)</Label>
               <Input
                 id="phone"
                 name="phone"
                 placeholder="+254712345678"
                 value={formData.phone}
                 onChange={handleInputChange}
+                className="w-full"
               />
+              <p className="text-xs text-muted-foreground">User's contact number for support purposes</p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="role" className="text-sm font-medium">Account Role</Label>
               <Select
                 value={formData.role}
                 onValueChange={handleRoleChange}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
@@ -421,44 +431,57 @@ const AdminUsers = () => {
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                <strong>Admin</strong>: Full access to all features. <strong>User</strong>: Limited access.
+              </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddUserDialogOpen(false)}>
+          <DialogFooter className="border-t pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsAddUserDialogOpen(false)}
+              className="mr-2"
+            >
               Cancel
             </Button>
-            <Button onClick={handleAddUser}>Add User</Button>
+            <Button 
+              onClick={handleAddUser}
+              className="min-w-[100px]"
+            >
+              Add User
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit User Dialog */}
       <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle className="text-2xl">Edit User</DialogTitle>
             <DialogDescription>
               Update the user account details.
             </DialogDescription>
           </DialogHeader>
           {selectedUser && (
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-email">Email</Label>
+            <div className="grid gap-6 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-email" className="text-sm font-medium">Email Address</Label>
                 <Input
                   id="edit-email"
                   name="email"
+                  type="email"
                   placeholder="user@example.com"
                   value={formData.email}
                   onChange={handleInputChange}
+                  className="w-full"
                 />
+                <p className="text-xs text-muted-foreground">Email address used for login</p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-password">
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-password" className="text-sm font-medium">
                   Password
-                  <span className="ml-1 text-sm text-muted-foreground">
-                    (leave empty to keep unchanged)
-                  </span>
                 </Label>
                 <Input
                   id="edit-password"
@@ -467,25 +490,33 @@ const AdminUsers = () => {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleInputChange}
+                  className="w-full"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to keep current password unchanged
+                </p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-phone">Phone (optional)</Label>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-phone" className="text-sm font-medium">Phone (optional)</Label>
                 <Input
                   id="edit-phone"
                   name="phone"
                   placeholder="+254712345678"
                   value={formData.phone}
                   onChange={handleInputChange}
+                  className="w-full"
                 />
+                <p className="text-xs text-muted-foreground">Contact number for support purposes</p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-role">Role</Label>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-role" className="text-sm font-medium">Account Role</Label>
                 <Select
                   value={formData.role}
                   onValueChange={handleRoleChange}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -493,24 +524,36 @@ const AdminUsers = () => {
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  <strong>Admin</strong>: Full access to all features. <strong>User</strong>: Limited access.
+                </p>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>
+          <DialogFooter className="border-t pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsEditUserDialogOpen(false)}
+              className="mr-2"
+            >
               Cancel
             </Button>
-            <Button onClick={handleUpdateUser}>Save Changes</Button>
+            <Button 
+              onClick={handleUpdateUser}
+              className="min-w-[120px]"
+            >
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete User Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive" />
+            <DialogTitle className="flex items-center gap-2 text-xl text-destructive">
+              <AlertCircle className="h-5 w-5" />
               Confirm Deletion
             </DialogTitle>
             <DialogDescription>
@@ -519,21 +562,41 @@ const AdminUsers = () => {
           </DialogHeader>
           {selectedUser && (
             <div className="py-4">
-              <p className="mb-2">
-                <strong>Email:</strong> {selectedUser.email}
-              </p>
-              {selectedUser.role && (
-                <p className="mb-2">
-                  <strong>Role:</strong> {selectedUser.role}
+              <div className="bg-muted/20 p-4 rounded-lg border space-y-2">
+                <p className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Email:</span> 
+                  <span className="font-mono text-sm">{selectedUser.email}</span>
                 </p>
-              )}
+                {selectedUser.role && (
+                  <p className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Role:</span> 
+                    <span>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        selectedUser.role === 'admin' 
+                          ? 'bg-primary/20 text-primary' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {selectedUser.role}
+                      </span>
+                    </span>
+                  </p>
+                )}
+              </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+          <DialogFooter className="border-t pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+              className="mr-2"
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteUser}>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteUser}
+              className="min-w-[100px]"
+            >
               Delete User
             </Button>
           </DialogFooter>

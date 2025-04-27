@@ -106,8 +106,8 @@ const Index = () => {
             title: service.title,
             description: service.description,
             icon: getServiceIcon(service.title),
-            imageUrl: service.image_path 
-              ? getFileUrl(service.image_path) 
+            imageUrl: service.image_url
+              ? getFileUrl(service.image_url)
               : null
           }));
           
@@ -143,20 +143,21 @@ const Index = () => {
         
         if (response.documents && Array.isArray(response.documents)) {
           // Transform API response to match component expectations
-          const transformedDocuments = response.documents.map(document => ({
+          const fetchedDocuments = response.documents.map(document => ({
             id: document.id,
             title: document.title,
             description: document.description,
-            thumbnailUrl: document.thumbnail_path 
-              ? getFileUrl(document.thumbnail_path) 
+            thumbnailUrl: document.thumbnail_url
+              ? getFileUrl(document.thumbnail_url)
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
             previewUrl: document.document_path
               ? getFileUrl(document.document_path)
-              : null
+              : null,
+            category: document.category || 'other',
           }));
           
           // Limit to 3 documents for the featured section
-          const limitedDocuments = transformedDocuments.slice(0, 3);
+          const limitedDocuments = fetchedDocuments.slice(0, 3);
           setDocuments(limitedDocuments);
         } else {
           // Use fallback documents if API doesn't return expected data
