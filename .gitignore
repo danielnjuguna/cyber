@@ -44,5 +44,6 @@ uploadthing-debug.js
 # Next.js shims (for compatibility)
 /src/lib/next-shims/
 
-# API files directory
-/api/files/
+# API files directory - allow [key].js but ignore other contents
+/api/files/*
+!/api/files/[key].js
