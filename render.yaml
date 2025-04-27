@@ -28,3 +28,11 @@ services:
       #   value: <YOUR_UPLOADTHING_APP_ID>
     # Define the root directory for the build output if needed
     # rootDir: dist # Usually not needed if startCommand points correctly 
+    staticPublishPath: ./
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /assets/*
+        name: Content-Type
+        value: application/javascript; charset=utf-8 

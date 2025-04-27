@@ -379,14 +379,28 @@ const startServer = async () => {
 
     // Serve the frontend from the build directory if we're in production
     if (process.env.NODE_ENV === 'production') {
-      // The distPath is now simply __dirname, as server.js is inside dist
+      // The distPath is now simply __dirname since files are copied to the root
       const distPath = __dirname;
       console.log(`Serving static frontend files from: ${distPath}`);
       
-      // Check if the index.html file exists within dist
+      // Look for index.html
       const indexHtmlPath = path.resolve(distPath, 'index.html');
       if (fs.existsSync(indexHtmlPath)) {
-        console.log('dist/index.html exists, serving static files');
+        console.log('index.html exists at:', indexHtmlPath);
+        
+        // Log the contents of the assets directory if it exists
+        const assetsPath = path.join(distPath, 'assets');
+        if (fs.existsSync(assetsPath)) {
+          console.log('Contents of assets directory:');
+          try {
+            const assetFiles = fs.readdirSync(assetsPath);
+            assetFiles.forEach(file => console.log(` - ${file}`));
+          } catch (err) {
+            console.error('Error reading assets directory:', err);
+          }
+        } else {
+          console.warn('assets directory not found at:', assetsPath);
+        }
         
         // Configure express.static with proper MIME types
         const staticOptions = {
@@ -427,31 +441,25 @@ const startServer = async () => {
             
             // Log to help with debugging
             const contentType = res.getHeader('Content-Type');
-            if (contentType) {
-              console.log(`Serving ${path.basename(filePath)} with Content-Type: ${contentType}`);
-            } else {
-              console.warn(`No Content-Type set for ${path.basename(filePath)}`);
-            }
+            console.log(`Serving ${path.basename(filePath)} with Content-Type: ${contentType || 'not set'}`);
           }
         };
         
-        // Important: First serve all the static assets
-        // Vite hashed assets (JS, CSS, images)
-        app.use('/assets', express.static(path.join(distPath, 'assets'), staticOptions));
-        
-        // Other static assets that might be at the root level
-        const staticFileExtensions = ['.js', '.css', '.ico', '.png', '.svg', '.jpg', '.jpeg', '.gif', '.webp', '.woff', '.woff2', '.ttf'];
-        app.get('*', (req, res, next) => {
-          // Check if the request is for a file with a static file extension
-          if (staticFileExtensions.some(ext => req.path.endsWith(ext))) {
-            const filePath = path.join(distPath, req.path);
-            // Check if the file exists
-            if (fs.existsSync(filePath)) {
-              return res.sendFile(filePath);
-            }
-          }
+        // Important: First serve specific directories with static content
+        // For assets (compiled JS, CSS, etc) using express.static
+        app.use('/assets', (req, res, next) => {
+          console.log(`Asset request: ${req.path}`);
           next();
-        });
+        }, express.static(path.join(distPath, 'assets'), staticOptions));
+        
+        // Serve public directory if it exists
+        const publicDir = path.join(distPath, 'public');
+        if (fs.existsSync(publicDir)) {
+          app.use('/public', express.static(publicDir, staticOptions));
+        }
+        
+        // Explicitly serve the root static files
+        app.use(express.static(distPath, staticOptions));
         
         // After static files, the catch-all for SPA routing - MUST be last
         app.get('*', (req, res) => {
@@ -459,8 +467,14 @@ const startServer = async () => {
           res.sendFile(indexHtmlPath);
         });
       } else {
-        console.error('ERROR: dist/index.html does not exist at:', indexHtmlPath);
-        console.log('dist directory contains:', fs.readdirSync(distPath));
+        console.error('ERROR: index.html does not exist at:', indexHtmlPath);
+        console.log('Root directory contains:');
+        try {
+          const files = fs.readdirSync(distPath);
+          files.forEach(file => console.log(` - ${file}`));
+        } catch (err) {
+          console.error('Error reading directory:', err);
+        }
       }
     }
 

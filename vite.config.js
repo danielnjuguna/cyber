@@ -33,29 +33,16 @@ export default defineConfig(({ mode }) => ({
     // Generate JS files with standard extensions
     outDir: 'dist',
     emptyOutDir: true,
-    manifest: true, // Generate a manifest.json in the dist folder
-    sourcemap: mode !== 'production', // Only generate sourcemaps in development
-    minify: mode === 'production',
+    minify: true,
+    sourcemap: false,
     rollupOptions: {
       output: {
         // Ensure proper extensions and formats
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js',
-        assetFileNames: 'assets/[name].[hash].[ext]',
-        // Avoid vendor chunk being too large
-        manualChunks: (id) => {
-          if (id.includes('node_modules')) {
-            // Group node_modules into vendor chunks
-            if (id.includes('react')) {
-              return 'vendor-react';
-            }
-            return 'vendor';
-          }
-        },
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
-    // Ensure proper MIME types
-    assetsInlineLimit: 0, // Disable asset inlining
   },
   optimizeDeps: {
     esbuildOptions: {
