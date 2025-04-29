@@ -183,26 +183,30 @@ export default async function handler(req, res) {
     }
 
   } else if (req.method === 'DELETE') {
-    // --- Handle DELETE: Delete user (Admin) ---
+    // --- Handle DELETE: Delete user (SuperAdmin Only) ---
     console.log(`DELETE /api/users/${targetUserId} request (admin)`);
 
+    // --- Authorization Check: Only Super Admins can delete users ---
+    if (authenticatedUser.role !== 'superadmin') {
+      console.log(`   ❌ Delete Auth Error: User ID ${authenticatedUser.id} Role (${authenticatedUser.role}) is not superadmin`);
+      return res.status(403).json({
+        message: 'Only Super Admins can delete users.'
+      });
+    }
+    // --- End Authorization Check ---
+
     try {
-      // Check if attempting to delete a superadmin (only superadmins can delete superadmins)
+      // Check if user exists (redundant given the auth check, but good practice)
       const [userToDelete] = await pool.execute(
         'SELECT id, role FROM users WHERE id = ?',
         [targetUserId]
       );
-      
+
       if (!userToDelete || userToDelete.length === 0) {
         return res.status(404).json({ message: 'User not found' });
       }
-      
-      // If trying to delete a superadmin, require superadmin privileges
-      if (userToDelete[0].role === 'superadmin' && authenticatedUser.role !== 'superadmin') {
-        return res.status(403).json({ 
-          message: 'Only Super Admins can delete Super Admin users'
-        });
-      }
+
+      // Note: The check preventing non-superadmins from deleting superadmins is now implicitly covered by the main check above.
 
       // Execute the delete operation
       const [result] = await pool.execute(
