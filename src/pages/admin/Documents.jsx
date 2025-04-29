@@ -345,7 +345,7 @@ const AdminDocuments = () => {
               <Plus className="mr-2 h-4 w-4" /> Add New Document
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{isEditing ? 'Edit Document' : 'Add New Document'}</DialogTitle>
               <DialogDescription>
