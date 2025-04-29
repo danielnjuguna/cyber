@@ -68,6 +68,7 @@ app.use(cors({
     'http://localhost:5000',
     'https://cyberdocs-app.onrender.com',  // Placeholder, might remove later
     'https://cyber-1-lywa.onrender.com',   // <<< Added your actual deployed frontend URL
+    'https://cyberkendos-mnin.onrender.com', // <<< Added NEW actual deployed frontend URL
     'https://cyberdocs.onrender.com',       // Placeholder? Keep if needed
     // Add any other production domains here if needed
   ],
