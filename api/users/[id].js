@@ -53,10 +53,10 @@ export default async function handler(req, res) {
   // User is authenticated as admin, proceed...
 
   // Get target user ID from the URL path parameter
-  const targetUserId = req.query.id;
+  const { id: targetUserId } = req.params;
   if (!targetUserId) {
-    console.log('Missing user ID in request');
-    return res.status(400).json({ message: 'Missing user ID in request' });
+    console.log('Missing user ID in request parameters');
+    return res.status(400).json({ message: 'Missing user ID in request parameters' });
   }
 
   // --- Route based on HTTP method ---

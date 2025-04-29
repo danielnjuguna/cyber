@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import { api } from '@/utils/api';
 import DocumentViewer from '@/components/DocumentViewer';
 import { getFileUrl } from '@/utils/config';
+import { saveAs } from 'file-saver';
 
 const DocumentView = () => {
   const { id } = useParams();
@@ -55,6 +56,11 @@ const DocumentView = () => {
       } catch (error) {
         console.error('Failed to fetch document:', error);
         setError('Failed to load document');
+        toast({
+          title: 'Error Loading Document',
+          description: error.message || 'Could not retrieve document details.',
+          variant: 'destructive',
+        });
       } finally {
         setIsLoading(false);
       }

@@ -74,9 +74,9 @@ const AdminServices = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState('idle');
 
-  // Redirect if not authenticated or not admin
+  // Redirect if not authenticated or not admin/superadmin
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || !user || user.role !== 'admin')) {
+    if (!isLoading && (!isAuthenticated || !user || (user.role !== 'admin' && user.role !== 'superadmin'))) {
       navigate('/login');
     }
   }, [isAuthenticated, isLoading, user, navigate]);
