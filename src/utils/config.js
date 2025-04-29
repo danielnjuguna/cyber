@@ -6,16 +6,9 @@ const isProd = import.meta.env.MODE === 'production' || import.meta.env.PROD;
 
 // Get the base URL for API calls
 const getBaseUrl = () => {
-  // Check for environment variable first (highest priority)
-  const configuredUrl = import.meta.env.VITE_API_BASE_URL;
-  if (configuredUrl) {
-    // Return the configured base URL directly. 
-    // Remove trailing slash if present for consistency.
-    return configuredUrl.replace(/\/$/, ''); 
-  }
-  
-  // Default development URL (server root)
-  return 'http://localhost:5000'; 
+  // For combined deployment, API calls are relative to the current origin.
+  // We return an empty string, and API_ENDPOINTS will start with '/api'.
+  return ''; 
 };
 
 // Log the environment to debug
@@ -25,11 +18,11 @@ console.log('Build environment:', {
   apiBaseUrl: getBaseUrl()
 });
 
-// Use the function to determine base URL
+// Use the function to determine base URL (will be empty string)
 export const BASE_URL = getBaseUrl();
 
 export const API_ENDPOINTS = {
-  // Auth endpoints - Fixed to match backend routes
+  // Endpoints will now correctly start with /api/...
   LOGIN: `${BASE_URL}/api/users/login`,
   REGISTER: `${BASE_URL}/api/users/register`,
   PROFILE: `${BASE_URL}/api/users/profile`,
@@ -88,11 +81,8 @@ export const getFileUrl = (path) => {
     return path; 
   }
   
-  // For relative paths (like those served from /uploads on the backend)
-  // use the BASE_URL determined earlier.
-  const baseServerUrl = BASE_URL; 
-    
-  // Ensure path starts with a single slash
+  // For relative paths (like /uploads/...), just ensure it starts with a slash.
+  // BASE_URL is empty, so we don't prepend anything.
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   
   // Properly encode the URL components while preserving slashes
@@ -100,16 +90,18 @@ export const getFileUrl = (path) => {
     .split('/')
     .map(segment => encodeURIComponent(segment))
     .join('/');
-  
-  const fullUrl = `${baseServerUrl}${encodedPath}`;
-  
+    
+  // In development, this might be useful, but in production, it's just the path.
+  // const fullUrl = `${BASE_URL}${encodedPath}`; // BASE_URL is empty
+  const fullUrl = encodedPath;
+
   // Log the URL construction in development only
   if (!isProd) {
-    console.log('File URL construction:', {
+    console.log('File URL construction (Combined Deployment):', {
       original: path,
       normalized: normalizedPath,
       encoded: encodedPath,
-      baseServerUrl: baseServerUrl, // Use the correct variable name
+      // baseServerUrl: BASE_URL, // BASE_URL is empty
       fullUrl,
       isProd
     });
