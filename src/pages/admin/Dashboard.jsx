@@ -32,17 +32,17 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Redirect if not authenticated or not admin
+  // Redirect if not authenticated or not admin/superadmin
   useEffect(() => {
-    console.log('Admin Dashboard - Auth Status:', { 
-      isAuthenticated, 
-      isLoading, 
+    console.log('Admin Dashboard - Auth Status:', {
+      isAuthenticated,
+      isLoading,
       userRole: user?.role,
       user
     });
-    
-    if (!isLoading && (!isAuthenticated || !user || user.role !== 'admin')) {
-      console.log('Redirecting to login - Not authorized as admin');
+
+    if (!isLoading && (!isAuthenticated || !user || (user.role !== 'admin' && user.role !== 'superadmin'))) {
+      console.log('Redirecting to login - Not authorized for admin dashboard');
       navigate('/login');
     }
   }, [isAuthenticated, isLoading, user, navigate]);
@@ -52,25 +52,30 @@ const AdminDashboard = () => {
     const fetchDashboardData = async () => {
       try {
         setIsLoading(true);
-        
+
+        // Check if user is authenticated and has a role before fetching
+        if (!user || !(user.role === 'admin' || user.role === 'superadmin')) {
+          console.log('Dashboard data fetch skipped: User not authorized.');
+          setIsLoading(false);
+          return; // Skip fetching if not authorized
+        }
+
         // Fetch services
         const servicesResponse = await api.getServices();
         if (servicesResponse.services && Array.isArray(servicesResponse.services)) {
           setServices(servicesResponse.services);
         }
-        
+
         // Fetch documents
         const documentsResponse = await api.getDocuments();
         if (documentsResponse.documents && Array.isArray(documentsResponse.documents)) {
           setDocuments(documentsResponse.documents);
         }
-        
-        // Fetch users if admin
-        if (user.role === 'admin') {
-          const usersResponse = await api.getUsers();
-          if (usersResponse.users && Array.isArray(usersResponse.users)) {
-            setUsers(usersResponse.users);
-          }
+
+        // Fetch users (accessible by admin/superadmin)
+        const usersResponse = await api.getUsers();
+        if (usersResponse.users && Array.isArray(usersResponse.users)) {
+          setUsers(usersResponse.users);
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
@@ -84,8 +89,11 @@ const AdminDashboard = () => {
       }
     };
 
-    fetchDashboardData();
-  }, [user.role]);
+    // Only run fetch if user exists and is authenticated
+    if (isAuthenticated && user) {
+      fetchDashboardData();
+    }
+  }, [isAuthenticated, user]); // Depend on user object to refetch if user data changes
 
   // Handle opening the respective forms
   const handleOpenDocumentsDialog = () => {
