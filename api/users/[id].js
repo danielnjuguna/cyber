@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   }
 
   // --- Get user ID from query parameter ---
-  const { id: userId } = req.query; // Vercel puts dynamic path segments in req.query
+  const { id: userId } = req.params; // NEW: Uses req.params for Express route parameters
   console.log(`Request received for user ID: ${userId}, Method: ${req.method}`);
 
   if (!userId || isNaN(parseInt(userId))) {

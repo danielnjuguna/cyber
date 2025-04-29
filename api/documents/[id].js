@@ -42,7 +42,7 @@ async function checkAdminAuth(req, res) {
 
 // --- Main Handler ---
 export default async function handler(req, res) {
-  const { id: documentId } = req.query;
+  const { id: documentId } = req.params;
 
   if (!documentId || isNaN(parseInt(documentId))) {
     return res.status(400).json({ message: 'Invalid document ID' });

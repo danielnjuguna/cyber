@@ -1,7 +1,7 @@
 import { pool } from '../../../lib/db.js'; // Adjust path based on nesting
 
 export default async function handler(req, res) {
-    const { id: documentId } = req.query; // Get ID from query
+    const { id: documentId } = req.params; // NEW
 
     if (!documentId || isNaN(parseInt(documentId))) {
         return res.status(400).json({ message: 'Invalid document ID' });

@@ -42,7 +42,7 @@ async function checkAdminAuth(req, res) {
 
 // --- Main Handler ---
 export default async function handler(req, res) {
-  const { id } = req.query;
+  const { id } = req.params;
   
   if (!id || isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid service ID' });

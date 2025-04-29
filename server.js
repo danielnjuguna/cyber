@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import { testConnection } from './lib/db.js';
 import path from 'path';
 import fs from 'fs';
+import { createRouteHandler } from "uploadthing/express"; // Import the official handler
+import { ourFileRouter } from './api/core.js'; // Import your router
 
 // Print all environment variables to help with debugging (without sensitive values)
 console.log('==== ENVIRONMENT INFO ====');
@@ -41,10 +43,6 @@ if (process.env.NODE_ENV !== 'production') {
 } else {
   console.log('Using environment variables from Render (production mode)');
 }
-
-// Import core router after environment setup
-// Adjust path based on running from dist
-import { ourFileRouter } from './api/core.js'; // This should work now as it's relative to dist/server.js
 
 const __filename = fileURLToPath(import.meta.url);
 // __dirname will now be /opt/render/project/src/dist (or similar)
@@ -257,14 +255,23 @@ const setupRoutes = async () => {
     console.log('  Setting up UploadThing routes...');
     if (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID) {
       try {
-        // Import the handler logic from api/uploadthing.js
-        const uploadThingRoute = await importRoute('uploadthing.js'); 
-        app.use('/api/uploadthing', uploadThingRoute); // Use the imported handler
-        console.log('    ✓ /api/uploadthing configured using api/uploadthing.js');
+        // Use the official createRouteHandler
+        app.use(
+          "/api/uploadthing",
+          createRouteHandler({
+            router: ourFileRouter,
+            config: { 
+              uploadthingSecret: process.env.UPLOADTHING_SECRET,
+              uploadthingId: process.env.UPLOADTHING_APP_ID,
+              // You might need to add other config options here based on your setup
+              // e.g., isDev: process.env.NODE_ENV === 'development',
+            },
+          })
+        );
+        console.log('    ✓ /api/uploadthing configured with createRouteHandler');
       } catch (utError) {
-         console.error('    ❌ Error loading UploadThing handler from api/uploadthing.js:', utError);
-         // Add fallback if import fails
-         app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable due to handler load error' }));
+         console.error('    ❌ Error configuring UploadThing createRouteHandler:', utError);
+         app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable due to config error' }));
       }
     } else {
       console.warn('    ⚠️ UploadThing secrets not found, /api/uploadthing route disabled.');
