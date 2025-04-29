@@ -9,16 +9,13 @@ const getBaseUrl = () => {
   // Check for environment variable first (highest priority)
   const configuredUrl = import.meta.env.VITE_API_BASE_URL;
   if (configuredUrl) {
-    return configuredUrl.endsWith('/api') ? configuredUrl : `${configuredUrl}/api`;
+    // Return the configured base URL directly. 
+    // Remove trailing slash if present for consistency.
+    return configuredUrl.replace(/\/$/, ''); 
   }
   
-  // Default for production is to use relative paths
-  if (isProd) {
-    return '/api';
-  }
-  
-  // Default development URL
-  return 'http://localhost:5000/api';
+  // Default development URL (server root)
+  return 'http://localhost:5000'; 
 };
 
 // Log the environment to debug
@@ -33,33 +30,33 @@ export const BASE_URL = getBaseUrl();
 
 export const API_ENDPOINTS = {
   // Auth endpoints - Fixed to match backend routes
-  LOGIN: `${BASE_URL}/users/login`,
-  REGISTER: `${BASE_URL}/users/register`,
-  PROFILE: `${BASE_URL}/users/profile`,
-  REQUEST_RESET: `${BASE_URL}/users/request-reset`,
-  RESET_PASSWORD: `${BASE_URL}/users/reset-password`,
+  LOGIN: `${BASE_URL}/api/users/login`,
+  REGISTER: `${BASE_URL}/api/users/register`,
+  PROFILE: `${BASE_URL}/api/users/profile`,
+  REQUEST_RESET: `${BASE_URL}/api/users/request-reset`,
+  RESET_PASSWORD: `${BASE_URL}/api/users/reset-password`,
   
   // Services endpoints
-  SERVICES: `${BASE_URL}/services`,
-  SERVICE_BY_ID: (id) => `${BASE_URL}/services/${id}`,
+  SERVICES: `${BASE_URL}/api/services`,
+  SERVICE_BY_ID: (id) => `${BASE_URL}/api/services/${id}`,
   
   // Documents endpoints
-  DOCUMENTS: `${BASE_URL}/documents`,
-  DOCUMENT_BY_ID: (id) => `${BASE_URL}/documents/${id}`,
+  DOCUMENTS: `${BASE_URL}/api/documents`,
+  DOCUMENT_BY_ID: (id) => `${BASE_URL}/api/documents/${id}`,
   
   // Users endpoints
-  USERS: `${BASE_URL}/users`,
-  USER_BY_ID: (id) => `${BASE_URL}/users/${id}`,
+  USERS: `${BASE_URL}/api/users`,
+  USER_BY_ID: (id) => `${BASE_URL}/api/users/${id}`,
   
   // Contact endpoint
-  CONTACT: `${BASE_URL}/contact`,
+  CONTACT: `${BASE_URL}/api/contact`,
   
   // File management endpoints
-  DELETE_FILE: (key) => `${BASE_URL}/files/${key}`,
+  DELETE_FILE: (key) => `${BASE_URL}/api/files/${key}`,
   
   // UploadThing endpoints
-  UPLOADTHING: `${BASE_URL}/uploadthing`,
-  UPLOAD_TOKEN: `${BASE_URL}/upload-token`,
+  UPLOADTHING: `${BASE_URL}/api/uploadthing`,
+  UPLOAD_TOKEN: `${BASE_URL}/api/upload-token`,
 };
 
 // Debug function to print all endpoints
@@ -85,30 +82,15 @@ export const getFileUrl = (path) => {
     return path;
   }
   
-  // If it's an UploadThing URL (any of their domain patterns)
-  // These should always be returned as-is since they're absolute URLs
+  // If it's an UploadThing URL (already absolute)
   const uploadThingDomains = ['uploadthing.com', 'utfs.io', 'ufs.sh'];
   if (uploadThingDomains.some(domain => path.includes(domain))) {
     return path; 
   }
   
-  // For non-UploadThing URLs, construct based on environment
-  // Base server URL - use environment variable if available
-  const baseServerUrl = (() => {
-    // Check for environment variable
-    const configuredUrl = import.meta.env.VITE_SERVER_URL;
-    if (configuredUrl) {
-      return configuredUrl;
-    }
-    
-    // In production, use relative URLs (empty string)
-    if (isProd) {
-      return ''; 
-    }
-    
-    // Default for development
-    return 'http://localhost:5000';
-  })();
+  // For relative paths (like those served from /uploads on the backend)
+  // use the BASE_URL determined earlier.
+  const baseServerUrl = BASE_URL; 
     
   // Ensure path starts with a single slash
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -127,6 +109,7 @@ export const getFileUrl = (path) => {
       original: path,
       normalized: normalizedPath,
       encoded: encodedPath,
+      baseServerUrl: baseServerUrl, // Use the correct variable name
       fullUrl,
       isProd
     });

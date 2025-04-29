@@ -66,8 +66,9 @@ app.use(cors({
   origin: [
     'http://localhost:8080', 
     'http://localhost:5000',
-    'https://cyberdocs-app.onrender.com',  // Add your Render domain here
-    'https://cyberdocs.onrender.com'       // And any other domains you might use
+    'https://cyberdocs-app.onrender.com',  // Added the frontend Render URL
+    'https://cyberdocs.onrender.com',       // And any other domains you might use
+    // Add any other production domains here if needed
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
