@@ -8,13 +8,13 @@
     "dev:frontend": "vite",
     "dev:api": "node server.js",
     "build": "vite build",
-    "start": "node dist/server.js",
-    "render-build": "npm cache clean --force && npm install uploadthing && vite build && cp server.js dist/ && mkdir -p dist/api && cp -r api/* dist/api/ && mkdir -p dist/api/files && cp api/files/index.js dist/api/files/ && mkdir -p dist/lib && cp -r lib/* dist/lib/ && echo 'File structure after build:' && ls -la ./dist && ls -la ./dist/api && ls -la ./dist/api/files",
+    "start": "node server.js",
     "check-env": "node check-env.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "reset-db": "node scripts/reset-db.js",
-    "update-schema": "node scripts/update-schema.js"
+    "update-schema": "node scripts/update-schema.js",
+    "render-build": "npm cache clean --force && npm install uploadthing && vite build && cp server.js dist/ && mkdir -p dist/api && cp -r api/* dist/api/ && mkdir -p dist/api/files && cp api/files/index.js dist/api/files/ && mkdir -p dist/lib && cp -r lib/* dist/lib/ && mkdir -p dist/middlewares && cp -r middlewares/* dist/middlewares/ && echo 'File structure after build:' && ls -la ./dist && ls -la ./dist/api && ls -la ./dist/api/files && ls -la ./dist/middlewares"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
