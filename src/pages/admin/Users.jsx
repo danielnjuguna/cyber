@@ -427,20 +427,24 @@ const AdminUsers = () => {
               <Select
                 value={formData.role}
                 onValueChange={handleRoleChange}
-                disabled={!isSuperAdmin && (formData.role === 'admin' || formData.role === 'superadmin')}
+                disabled={!isSuperAdmin}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  {isSuperAdmin && <SelectItem value="superadmin">Super Admin</SelectItem>}
+                  {isSuperAdmin && (
+                    <>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="superadmin">Super Admin</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 <strong>Super Admin</strong>: Can manage all users including admins. <strong>Admin</strong>: Can manage content and regular users. <strong>User</strong>: Limited access.
-                {!isSuperAdmin && <span className="block mt-1 text-amber-600 dark:text-amber-400">Note: Only Super Admins can change user roles to Admin or Super Admin.</span>}
+                {!isSuperAdmin && <span className="block mt-1 text-amber-600 dark:text-amber-400">Note: Only Super Admins can assign Admin or Super Admin roles.</span>}
               </p>
             </div>
           </div>
@@ -523,20 +527,26 @@ const AdminUsers = () => {
                 <Select
                   value={formData.role}
                   onValueChange={handleRoleChange}
-                  disabled={!isSuperAdmin && (formData.role === 'admin' || formData.role === 'superadmin')}
+                  disabled={!isSuperAdmin && (selectedUser?.role === 'admin' || selectedUser?.role === 'superadmin')}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    {isSuperAdmin && <SelectItem value="superadmin">Super Admin</SelectItem>}
+                    {isSuperAdmin && (
+                      <>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="superadmin">Super Admin</SelectItem>
+                      </>
+                    )}
+                    {!isSuperAdmin && (selectedUser?.role === 'admin') && <SelectItem value="admin" disabled>Admin</SelectItem>}
+                    {!isSuperAdmin && (selectedUser?.role === 'superadmin') && <SelectItem value="superadmin" disabled>Super Admin</SelectItem>}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   <strong>Super Admin</strong>: Can manage all users including admins. <strong>Admin</strong>: Can manage content and regular users. <strong>User</strong>: Limited access.
-                  {!isSuperAdmin && <span className="block mt-1 text-amber-600 dark:text-amber-400">Note: Only Super Admins can change user roles to Admin or Super Admin.</span>}
+                  {!isSuperAdmin && <span className="block mt-1 text-amber-600 dark:text-amber-400">Note: Only Super Admins can change user roles.</span>}
                 </p>
               </div>
             </div>

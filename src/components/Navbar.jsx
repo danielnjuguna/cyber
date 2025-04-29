@@ -99,7 +99,7 @@ const Navbar = () => {
                     <span>Profile</span>
                   </Link>
                 </DropdownMenuItem>
-                {user && user.role === 'admin' && (
+                {user && (user.role === 'admin' || user.role === 'superadmin') && (
                   <DropdownMenuItem asChild>
                     <Link to="/admin/dashboard" className="cursor-pointer">
                       <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -162,7 +162,7 @@ const Navbar = () => {
                   <User className="inline-block mr-2 h-4 w-4" />
                   <span>Profile</span>
                 </Link>
-                {user && user.role === 'admin' && (
+                {user && (user.role === 'admin' || user.role === 'superadmin') && (
                   <Link 
                     to="/admin/dashboard" 
                     className="py-2 text-base font-medium text-foreground/80 hover:text-primary"
