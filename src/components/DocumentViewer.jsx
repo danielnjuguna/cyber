@@ -30,18 +30,22 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
 
     // Helper function to fetch and convert DOCX
     const fetchAndConvertDocx = async (url) => {
+      console.log(`Attempting to fetch and convert DOCX: ${url}`);
       try {
         const response = await fetch(url);
+        console.log(`DOCX fetch response status: ${response.status}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const arrayBuffer = await response.arrayBuffer();
+        console.log('DOCX ArrayBuffer fetched, converting to HTML...');
         const result = await mammoth.convertToHtml({ arrayBuffer });
+        console.log('DOCX conversion successful.');
         setDocxHtml(result.value); // The generated HTML
         setLoading(false);
       } catch (conversionError) {
-        console.error('Error converting DOCX:', conversionError);
-        setError('Failed to preview DOCX file.');
+        console.error('Error fetching or converting DOCX:', conversionError);
+        setError(`Failed to preview DOCX file. ${conversionError.message}`);
         setLoading(false);
       }
     };
@@ -438,8 +442,11 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
       return <PDFViewer />;
     }
     
-    // NEW: Render DOCX content
+    // Render DOCX content
     if (fileType === 'docx-custom') {
+      if (!docxHtml && !loading && !error) {
+         return <CustomErrorComponent errorComponent={null} messageOverride="Preview generation failed for this DOCX file."/>;
+      }
       return <DocxViewer html={docxHtml} />;
     }
     
@@ -541,15 +548,15 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
     return <CustomErrorComponent />; // Show error or a loading state if appropriate
   };
 
-  // Custom error component for FileViewer
-  const CustomErrorComponent = ({ errorComponent }) => {
+  // Custom error component for FileViewer - Allow message override
+  const CustomErrorComponent = ({ errorComponent, messageOverride }) => {
     const IconComponent = formatIcon;
     
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <IconComponent className="h-10 w-10 text-muted-foreground mb-4" />
         <h3 className="text-lg font-medium mb-2">{formatName} Preview</h3>
-        <p className="text-muted-foreground">There was a problem displaying this document</p>
+        <p className="text-muted-foreground">{messageOverride || "There was a problem displaying this document"}</p>
         <p className="text-sm text-muted-foreground mt-4">Please contact us for the full document.</p>
       </div>
     );
@@ -565,8 +572,6 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
   }
 
   if (error) {
-    const IconComponent = formatIcon;
-    
     return (
       <div className={cn("flex flex-col items-center justify-center p-8 text-center", className)}>
         <AlertCircle className="h-10 w-10 text-destructive mb-4" />
