@@ -175,170 +175,106 @@ app.use('/api/uploadthing', (req, res) => {
   });
 });
 
-// Fix the importRoute function to load from dist/api
+// --- Import Route Handlers ---
+// Helper function to import routes
 const importRoute = async (relativePathSpecifier) => {
   try {
-    // Path is now relative to __dirname (which is dist)
     const modulePath = path.resolve(__dirname, 'api', relativePathSpecifier);
     const importPath = `file://${modulePath}`;
     console.log(`Attempting to import route from dist: ${importPath}`);
-        
     const module = await import(importPath);
     return module.default;
   } catch (err) {
     console.error(`Failed to import route '${relativePathSpecifier}' from dist:`, err);
-    throw err;
+    throw err; // Re-throw error to be caught by setupRoutes
   }
 };
 
-// Setup API routes
+// --- API Setup Function ---
 const setupRoutes = async () => {
+  console.log('Setting up API routes...');
   try {
-    // Use dynamic imports to load actual API routes
-    console.log('Setting up routes with actual API handlers');
-    
-    // First, attempt to import all routes dynamically
-    try {
-      // Import users/auth routes (login, register, etc.)
-      const usersRoute = await importRoute('users/index.js');
-      app.use('/api/users', usersRoute);
-      console.log('✓ Successfully loaded users routes');
-      
-      // Import documents routes
-      const documentsRoute = await importRoute('documents/index.js');
-      app.use('/api/documents', documentsRoute);
-      console.log('✓ Successfully loaded documents routes');
-      
-      // Import services routes
-      const servicesRoute = await importRoute('services/index.js');
-      app.use('/api/services', servicesRoute);
-      console.log('✓ Successfully loaded services routes');
-      
-      // Import contact routes
-      const contactRoute = await importRoute('contact/index.js');
-      app.use('/api/contact', contactRoute);
-      console.log('✓ Successfully loaded contact routes');
-      
-      // Import files routes directly from index.js without trying [key].js first
+    // --- PUBLIC AUTH ROUTES (No Auth Middleware) ---
+    console.log('  Setting up PUBLIC auth routes...');
+    const loginHandler = await importRoute('users/login.js');
+    app.post('/api/users/login', loginHandler);
+    console.log('    ✓ POST /api/users/login');
+
+    const registerHandler = await importRoute('users/register.js');
+    app.post('/api/users/register', registerHandler);
+    console.log('    ✓ POST /api/users/register');
+
+    const requestResetHandler = await importRoute('users/request-reset.js');
+    app.post('/api/users/request-reset', requestResetHandler);
+    console.log('    ✓ POST /api/users/request-reset');
+
+    const resetPasswordHandler = await importRoute('users/reset-password.js');
+    app.post('/api/users/reset-password', resetPasswordHandler);
+    console.log('    ✓ POST /api/users/reset-password');
+
+    // --- PROTECTED USER ROUTES (Specific Auth Middleware might be needed inside handlers) ---
+    console.log('  Setting up PROTECTED user routes...');
+    // Example: Profile might check auth internally or use a specific middleware if needed
+    const profileHandler = await importRoute('users/profile.js');
+    app.get('/api/users/profile', profileHandler); // Apply auth check within profileHandler if needed
+    console.log('    ✓ GET /api/users/profile');
+
+    // --- ADMIN-ONLY /api/users ROUTES (Uses checkAdminAuth from users/index.js) ---
+    console.log('  Setting up ADMIN-ONLY /api/users routes...');
+    const adminUsersHandler = await importRoute('users/index.js');
+    // Apply this handler only for routes NOT handled above that start with /api/users
+    // This typically means GET /api/users, POST /api/users (create user), GET /api/users/:id, PUT/DELETE /api/users/:id etc.
+    // Ensure this doesn't accidentally override the public routes defined above.
+    // Express matches routes in order. A more specific router might be better.
+    app.use('/api/users', adminUsersHandler); // This will apply checkAdminAuth defined within it
+    console.log('    ✓ Applied admin handler to remaining /api/users/*');
+
+
+    // --- OTHER RESOURCE ROUTES (Apply specific auth middleware as needed) ---
+    console.log('  Setting up other resource routes...');
+    const documentsRoute = await importRoute('documents/index.js'); // Assumes documents/index.js handles its own auth checks if needed
+    app.use('/api/documents', documentsRoute);
+    console.log('    ✓ /api/documents/*');
+
+    const servicesRoute = await importRoute('services/index.js'); // Assumes services/index.js handles its own auth checks if needed
+    app.use('/api/services', servicesRoute);
+    console.log('    ✓ /api/services/*');
+
+    const contactRoute = await importRoute('contact/index.js'); // Likely public
+    app.use('/api/contact', contactRoute);
+    console.log('    ✓ /api/contact');
+
+    // Files route (Auth check likely needed within handler)
+    const filesRouteHandler = await importRoute('files/index.js');
+    app.use('/api/files', filesRouteHandler);
+    console.log('    ✓ /api/files/*');
+
+    // UploadThing route (Uses UploadThing's own auth mechanisms)
+    if (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID) {
       try {
-        console.log('Loading files route from index.js...');
-        const filesRouteHandler = await importRoute('files/index.js');
-        app.use('/api/files', filesRouteHandler);
-        console.log('✓ Successfully loaded files routes from index.js');
-      } catch (error) {
-        console.error(`Error loading files route 'files/index.js':`, error);
-        // Fallback for files route
-        app.all('/api/files/:key?', (req, res) => {
-          res.status(500).json({ message: 'Files API endpoint failed to load (fallback)' });
-        });
+        const uploadThingRoute = await importRoute('uploadthing.js');
+        app.use('/api/uploadthing', uploadThingRoute);
+        console.log('    ✓ /api/uploadthing');
+      } catch (utError) {
+         console.error('    ❌ Error loading UploadThing routes:', utError);
+         app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable' }));
       }
-      
-      // Import UploadThing routes if not disabled
-      if (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID) {
-        try {
-          const uploadThingRoute = await importRoute('uploadthing.js');
-          app.use('/api/uploadthing', uploadThingRoute);
-          console.log('✓ Successfully loaded uploadthing routes');
-        } catch (error) {
-          console.error('Error loading UploadThing routes:', error);
-          // Fallback to temporary disabled endpoint
-          app.use('/api/uploadthing', (req, res) => {
-            res.status(503).json({
-              error: true,
-              message: 'UploadThing service is currently unavailable'
-            });
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error loading dynamic routes, falling back to simplified routes:', error);
-      
-      // Fallback to simplified routes if dynamic imports fail
-      
-      // Create a simple router for all service endpoints
-      app.all('/api/services/:id?', (req, res) => {
-        res.json({ message: 'Services API endpoint (simplified fallback)' });
-      });
-      
-      // Create a simple router for all document endpoints
-      app.all('/api/documents/:id?', (req, res) => {
-        res.json({ message: 'Documents API endpoint (simplified fallback)' });
-      });
-      
-      // Create a simple router for all user endpoints
-      app.all('/api/users/:id?', (req, res) => {
-        res.json({ message: 'Users API endpoint (simplified fallback)' });
-      });
-      
-      // Create a proper mock for the login endpoint that returns the expected structure
-      app.post('/api/users/login', (req, res) => {
-        console.log('Login attempt with:', req.body);
-        
-        // Extract credentials from request body
-        const { email, password } = req.body;
-        
-        // Check if credentials match the admin credentials
-        const isAdmin = email === process.env.ADMIN_EMAIL && 
-                       password === process.env.ADMIN_PASSWORD;
-        
-        if (isAdmin) {
-          // Return a proper user object with a role
-          res.json({
-            success: true,
-            user: {
-              id: 1,
-              email: email,
-              name: 'Admin User',
-              role: 'admin',
-              created_at: new Date().toISOString()
-            },
-            token: 'mock-jwt-token-for-testing'
-          });
-        } else {
-          // Return a staff user for testing
-          res.json({
-            success: true,
-            user: {
-              id: 2,
-              email: email,
-              name: 'Staff User',
-              role: 'staff',
-              created_at: new Date().toISOString()
-            },
-            token: 'mock-jwt-token-for-testing'
-          });
-        }
-      });
-      
-      app.post('/api/users/register', (req, res) => {
-        res.json({ success: true, message: 'Register endpoint (simplified fallback)' });
-      });
-      
-      app.all('/api/contact', (req, res) => {
-        res.json({ message: 'Contact API endpoint (simplified fallback)' });
-      });
-      
-      app.all('/api/files/:key', (req, res) => {
-        res.json({ message: 'Files API endpoint (simplified fallback)' });
-      });
     }
 
-    // Add a test route
+    // Health check route (Public)
     app.get('/api/health', (req, res) => {
-      res.json({ 
-        status: 'ok', 
-        message: 'Server is running',
-        environment: {
-          NODE_ENV: process.env.NODE_ENV,
-          isRender: process.env.RENDER === 'true',
-          renderServiceDir: process.env.RENDER_PROJECT_DIR || 'not set',
-          currentDir: __dirname
-        }
-      });
+      res.json({ status: 'ok', message: 'Server is running' });
     });
+    console.log('    ✓ /api/health');
+
+    console.log('✓ API routes setup complete.');
+
   } catch (error) {
-    console.error('Failed to set up routes:', error);
-    throw error;
+    console.error('❌ Failed to set up API routes:', error);
+    // Fallback or specific error handling if needed in production
+    app.use('/api/*', (req, res) => {
+        res.status(500).json({ message: 'Error initializing API routes', error: error.message });
+    });
   }
 };
 
