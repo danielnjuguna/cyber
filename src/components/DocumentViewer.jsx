@@ -1,885 +1,595 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FileText, AlertCircle, Lock, FileSpreadsheet, Image as ImageIcon, FileCode, FileCog, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { FileText, AlertCircle, Lock, FileSpreadsheet, File, Image } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import DocViewer, { DocViewerRenderers } from 'react-doc-viewer';
-import {
-  estimatePdfPageCount,
-  estimateDocxPageCount,
-  estimateTextPageCount,
-  getBlurStyles,
-  getEstimatedPageCount
-} from '@/utils/document-utils';
-
-// Define components outside the main function
-// Custom error component
-const CustomErrorComponent = ({ errorComponent }) => (
-  <div className="h-[600px] flex flex-col items-center justify-center p-8 text-center">
-    <div className="bg-red-50 p-8 rounded-lg border border-red-100 shadow-sm max-w-md">
-      <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-        <AlertCircle className="h-8 w-8 text-red-600" />
-      </div>
-      <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Document</h3>
-      <p className="text-red-600 text-sm mb-4">
-        {typeof errorComponent === 'string' ? errorComponent : 'There was a problem loading the document'}
-      </p>
-    </div>
-  </div>
-);
-
-// Component for showing the type of document when no preview is available
-const DocumentTypePreview = ({ type, extension, displayName, formatName, documentUrl }) => {
-  const getDescription = () => {
-    switch (type) {
-      case 'office':
-        return `This ${formatName.toLowerCase()} preview is simplified. Full document features are available upon request.`;
-      case 'unsupported':
-        return 'This file type is not supported for preview';
-      default:
-        return 'Document preview is not available';
-    }
-  };
-  
-  const getIcon = () => {
-    switch (extension) {
-      case 'doc':
-      case 'docx':
-        return <FileText className="h-20 w-20 text-blue-600" />;
-      case 'xls':
-      case 'xlsx':
-        return <FileSpreadsheet className="h-20 w-20 text-green-600" />;
-      case 'ppt':
-      case 'pptx':
-        return <FileText className="h-20 w-20 text-orange-600" />;
-      default:
-        return <FileCog className="h-20 w-20 text-muted-foreground" />;
-    }
-  };
-  
-  return (
-    <div className="h-[600px] flex flex-col items-center justify-center p-8 text-center bg-background/50">
-      <div className="bg-muted/10 p-8 rounded-lg border border-muted shadow-sm">
-        <div className="mx-auto mb-4 rounded-full flex items-center justify-center">
-          {getIcon()}
-    </div>
-        <h3 className="text-xl font-medium mb-2">{displayName}</h3>
-        <p className="text-muted-foreground text-sm mb-6 max-w-md">
-          {getDescription()}
-        </p>
-        
-        {documentUrl && (
-          <a 
-            href={documentUrl} 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Download Document
-          </a>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// BlurOverlay component
-const BlurOverlay = ({ children, document, previewLimit, pageCount }) => {
-  const [scrollLimitReached, setScrollLimitReached] = useState(false);
-  const contentRef = useRef(null);
-  const isSinglePage = pageCount <= 1;
-  
-  // Apply scroll limits directly to all scrollable elements
-  useEffect(() => {
-    // Wait for content to fully render
-    setTimeout(() => {
-      if (!contentRef.current) return;
-      
-      // Directly get the document viewer container
-      const docViewerContainer = contentRef.current.querySelector('#react-doc-viewer');
-      if (!docViewerContainer) {
-        console.error("[BlurOverlay] Could not find #react-doc-viewer element");
-        return;
-      }
-      
-      // Find all potentially scrollable elements
-      const potentialScrollables = Array.from(docViewerContainer.querySelectorAll('*'));
-      
-      // Track which elements we've modified
-      const modifiedElements = [];
-      
-      // Apply to all potential scrollable elements - very aggressive approach
-      potentialScrollables.forEach(element => {
-        // Skip elements that are clearly not scrollable containers
-        if (element.tagName === 'BUTTON' || 
-            element.tagName === 'SPAN' || 
-            element.tagName === 'IMG' ||
-            element.tagName === 'P' ||
-            element.offsetHeight < 50) {
-          return;
-        }
-        
-        // Check computed style
-        const style = window.getComputedStyle(element);
-        const hasScroll = style.overflowY === 'auto' || 
-                          style.overflowY === 'scroll' || 
-                          style.overflow === 'auto' || 
-                          style.overflow === 'scroll';
-        
-        if (hasScroll || element.scrollHeight > element.clientHeight) {
-          console.log("[BlurOverlay] Found scrollable element:", element);
-          modifiedElements.push(element);
-          
-          // For single page documents, just disable scrolling
-          if (isSinglePage) {
-            element.style.overflowY = 'hidden';
-            return;
-          }
-          
-          // Calculate preview limit (default to 50% if not specified)
-          const previewLimitPercent = previewLimit ? previewLimit / 100 : 0.5;
-          
-          // Create a hard-stop at the percentage
-          const handleScroll = function(e) {
-            const maxScroll = Math.floor(this.scrollHeight * previewLimitPercent);
-            if (this.scrollTop >= maxScroll) {
-              // Immediately prevent further scrolling
-              e.preventDefault();
-              e.stopPropagation();
-              
-              // Reset to exact limit position
-              this.scrollTop = maxScroll;
-              setScrollLimitReached(true);
-            } else {
-              setScrollLimitReached(false);
-            }
-          };
-          
-          // Apply all necessary event listeners for complete control
-          element.addEventListener('scroll', handleScroll, { passive: false, capture: true });
-          element.addEventListener('wheel', function(e) {
-            const maxScroll = Math.floor(this.scrollHeight * previewLimitPercent);
-            if (this.scrollTop >= maxScroll && e.deltaY > 0) {
-              e.preventDefault();
-              e.stopPropagation();
-              setScrollLimitReached(true);
-            }
-          }, { passive: false, capture: true });
-          
-          // Handle touch events for mobile devices
-          element.addEventListener('touchmove', function(e) {
-            const maxScroll = Math.floor(this.scrollHeight * previewLimitPercent);
-            if (this.scrollTop >= maxScroll) {
-              e.preventDefault();
-              setScrollLimitReached(true);
-            }
-          }, { passive: false, capture: true });
-          
-          // Immediately apply the limit
-          setTimeout(() => {
-            if (element.scrollTop > Math.floor(element.scrollHeight * previewLimitPercent)) {
-              element.scrollTop = Math.floor(element.scrollHeight * previewLimitPercent);
-            }
-          }, 100);
-        }
-      });
-      
-      console.log("[BlurOverlay] Modified " + modifiedElements.length + " scrollable elements");
-      
-      // Set up a MutationObserver to catch dynamically added scrollable elements
-      const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-          if (mutation.type === 'childList') {
-            mutation.addedNodes.forEach(node => {
-              if (node.nodeType === 1) { // Element node
-                const scrollable = node.querySelector('[style*="overflow"]');
-                if (scrollable && !modifiedElements.includes(scrollable)) {
-                  const previewLimitPercent = previewLimit ? previewLimit / 100 : 0.5;
-                  
-                  scrollable.addEventListener('scroll', function(e) {
-                    const maxScroll = Math.floor(this.scrollHeight * previewLimitPercent);
-                    if (this.scrollTop >= maxScroll) {
-                      e.preventDefault();
-                      this.scrollTop = maxScroll;
-                      setScrollLimitReached(true);
-                    } else {
-                      setScrollLimitReached(false);
-                    }
-                  }, { passive: false, capture: true });
-                  
-                  modifiedElements.push(scrollable);
-                  console.log("[BlurOverlay] Added scroll limit to dynamically added element");
-                }
-              }
-            });
-          }
-        }
-      });
-      
-      observer.observe(docViewerContainer, { 
-        childList: true,
-        subtree: true
-      });
-      
-      // Apply hard limits periodically to catch any delayed rendering
-      const applyHardLimit = () => {
-        const previewLimitPercent = previewLimit ? previewLimit / 100 : 0.5;
-        
-        modifiedElements.forEach(element => {
-          const maxScroll = Math.floor(element.scrollHeight * previewLimitPercent);
-          if (element.scrollTop > maxScroll) {
-            element.scrollTop = maxScroll;
-          }
-        });
-      };
-      
-      // Apply multiple times to catch any late-rendering content
-      setTimeout(applyHardLimit, 500);
-      setTimeout(applyHardLimit, 1000);
-      setTimeout(applyHardLimit, 2000);
-      setTimeout(applyHardLimit, 3000);
-      
-      return () => {
-        observer.disconnect();
-      };
-    }, 500); // Wait for initial render
-  }, [isSinglePage, document, previewLimit]);
-  
-  // Create a wrapper to add blur effects without modifying the DocViewer component
-  return (
-    <div className="relative overflow-hidden" ref={contentRef}>
-      {/* The document viewer content */}
-      <div className="relative">
-        {children}
-      </div>
-      
-      {/* Limit line at preview limit percentage */}
-      <div className="absolute left-0 right-0 pointer-events-none" style={{ 
-        top: `${previewLimit || 50}%`,
-        height: '2px',
-        background: 'linear-gradient(to right, rgba(82, 150, 216, 0.3), rgba(82, 150, 216, 0.8), rgba(82, 150, 216, 0.3))',
-        zIndex: 100
-      }}>
-        <div className="absolute right-4 top-0 transform -translate-y-full bg-primary/20 text-primary text-xs py-1 px-2 rounded-t-md">
-          <span>Preview Limit</span>
-        </div>
-      </div>
-      
-      {/* Blur overlay starting from 5% before the limit for smooth transition */}
-      <div className="absolute inset-x-0 pointer-events-none" style={{ 
-        top: `${(previewLimit || 50) - 5}%`,
-        bottom: 0,
-        background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 30%, rgba(255,255,255,0.95) 100%)',
-        zIndex: 50
-      }}/>
-      
-      {/* Strong blur overlay at bottom with message */}
-      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ 
-        height: '30%',
-        background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.9) 40%, rgba(255,255,255,0.98))'
-      }}>
-        <div className="absolute inset-x-0 bottom-4 flex justify-center items-center">
-          <div className="bg-primary/10 rounded-full py-2 px-4 flex items-center space-x-2 border border-primary/20 shadow-lg">
-            <Lock className="h-4 w-4 text-primary" />
-            <span className="text-sm text-primary font-medium">
-              {isSinglePage ? "Full document available upon request" : "Scroll limit reached. Contact us for full access."}
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Physical scroll blocker - appears when limit is reached or for single page */}
-      <div 
-        className={cn(
-          "absolute left-0 right-0 bottom-0 z-[1000]",
-          !scrollLimitReached && !isSinglePage && "pointer-events-none opacity-0"
-        )}
-        style={{ 
-          top: `${previewLimit || 50}%`,
-          background: 'transparent',
-          cursor: 'not-allowed',
-          pointerEvents: scrollLimitReached || isSinglePage ? 'all' : 'none',
-          transition: 'opacity 0.2s'
-        }}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          
-          // Make the limit indicator pulse
-          const limitLine = contentRef.current?.querySelector('div[style*="background: linear-gradient(to right, rgba(82, 150, 216"]');
-          if (limitLine) {
-            limitLine.style.boxShadow = '0 0 10px rgba(82, 150, 216, 0.8)';
-            setTimeout(() => {
-              limitLine.style.boxShadow = 'none';
-            }, 800);
-          }
-        }}
-      />
-    </div>
-  );
-};
+import FileViewer from 'react-file-viewer';
+import { saveAs } from 'file-saver';
+import * as mammoth from 'mammoth'; // Import mammoth
 
 /**
  * A component that renders various document types directly in the browser
- * using react-doc-viewer with a blurred preview effect
+ * with a blurred preview effect on a portion of the first page only
  */
-export default function DocumentViewer({ documentUrl, pageCount, previewLimit = 30, className }) {
+const DocumentViewer = ({ documentUrl, documentType, className }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeDocument, setActiveDocument] = useState(null);
+  const [fileType, setFileType] = useState(null);
+  const [fileName, setFileName] = useState('document');
+  const [formatIcon, setFormatIcon] = useState(() => FileText);
+  const [formatName, setFormatName] = useState('document');
+  const [textContent, setTextContent] = useState('');
+  const [docxHtml, setDocxHtml] = useState(''); // State for DOCX HTML
   const viewerRef = useRef(null);
-  const loadingTimeoutRef = useRef(null);
-  
-  // Basic document object
-  const document = { uri: documentUrl };
-  
-  // Function to get file extension
-  const getFileExtension = useCallback((url) => {
-    if (!url) return '';
-    return url.split('.').pop().toLowerCase();
-  }, []);
 
-  // Check if document type is supported for direct rendering in the browser
-  const getDocumentType = useCallback((extension) => {
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension)) {
-      return 'image';
-    } else if (extension === 'pdf') {
-      return 'pdf';
-    } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension)) {
-      return 'office';
-    } else if (['txt', 'csv', 'html', 'htm', 'json'].includes(extension)) {
-      return 'text';
-    } else {
-      return 'unknown';
-    }
-  }, []);
-
-  // Check if we should use a simplified preview
-  const shouldUseSimplifiedPreview = useCallback((extension) => {
-    // Office documents often have loading issues, use simplified preview
-    return ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension);
-  }, []);
-
-  // Set loading to false and determine document type
   useEffect(() => {
-    console.log("[DocumentViewer] Document URL:", documentUrl);
-    
     if (!documentUrl) {
-      console.log("[DocumentViewer] No document URL provided");
-      setError("No document URL provided");
+      setError('No document URL provided');
       setLoading(false);
       return;
     }
-    
-    // Reset states when URL changes
-    setLoading(true);
-    setError(null);
-    setActiveDocument({ uri: documentUrl });
-    
-    // Clear any existing timeout
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-    }
 
-    const extension = getFileExtension(documentUrl);
-    const docType = getDocumentType(extension);
-    
-    console.log(`[DocumentViewer] Document type: ${docType} (${extension})`);
-    
-    // Different handling based on document type
-    if (docType === 'image') {
-      console.log("[DocumentViewer] Using image preview mode");
-      const imgElement = new window.Image();
-      imgElement.onload = () => {
-        console.log("[DocumentViewer] Image loaded successfully");
+    // Helper function to fetch and convert DOCX
+    const fetchAndConvertDocx = async (url) => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer });
+        setDocxHtml(result.value); // The generated HTML
         setLoading(false);
-      };
-      imgElement.onerror = (e) => {
-        console.error("[DocumentViewer] Failed to load image:", e);
-        setError("Unable to load the image. Please check the URL or try again later.");
+      } catch (conversionError) {
+        console.error('Error converting DOCX:', conversionError);
+        setError('Failed to preview DOCX file.');
         setLoading(false);
-      };
-      imgElement.src = documentUrl;
-    } else if (docType === 'pdf') {
-      console.log("[DocumentViewer] Using PDF preview mode");
-      // For PDFs, allow a bit more time but still have a timeout
-      loadingTimeoutRef.current = setTimeout(() => {
-        console.log("[DocumentViewer] Setting PDF loading complete");
+      }
+    };
+
+    // Determine file type from URL or passed documentType
+    const determineFileType = () => {
+      try {
+        setLoading(true);
+        setError(null); // Reset error on new load
+        setDocxHtml(''); // Reset docx html
+        setTextContent(''); // Reset text content
+        
+        // Extract filename from URL
+        const urlParts = documentUrl.split('/');
+        const fullFileName = urlParts[urlParts.length - 1];
+        setFileName(fullFileName.split('?')[0]); // Remove query parameters if any
+        
+        // Get extension
+        const extension = fullFileName.split('.').pop().toLowerCase();
+        setFormatName(extension.toUpperCase());
+        
+        // Map extension to file type for react-file-viewer
+        let determinedType = 'unsupported'; // Default type
+        switch (extension) {
+          // PDF documents
+          case 'pdf':
+            determinedType = 'pdf-custom';
+            setFormatIcon(() => FileText);
+            break;
+          
+          // Word documents
+          case 'docx':
+            determinedType = 'docx-custom';
+            setFormatIcon(() => FileText);
+            fetchAndConvertDocx(documentUrl); // Start fetching and converting
+            break;
+          case 'doc':
+            determinedType = 'unsupported';
+            setFormatIcon(() => FileText);
+            break;
+          
+          // Excel spreadsheets
+          case 'xlsx':
+          case 'xls':
+            determinedType = 'xlsx-custom';
+            setFormatIcon(() => FileSpreadsheet);
+            break;
+          
+          // PowerPoint presentations
+          case 'pptx':
+          case 'ppt':
+            determinedType = 'pptx-custom';
+            setFormatIcon(() => FileText);
+            break;
+          
+          // Text files
+          case 'txt':
+          case 'rtf':
+            determinedType = 'txt-custom';
+            setFormatIcon(() => FileText);
+            fetchTextContent(documentUrl); // Fetch text
+            break;
+          
+          // Images
+          case 'jpg':
+          case 'jpeg':
+            determinedType = 'jpg';
+            setFormatIcon(() => Image);
+            break;
+          case 'png':
+            determinedType = 'png';
+            setFormatIcon(() => Image);
+            break;
+          case 'gif':
+            determinedType = 'gif';
+            setFormatIcon(() => Image);
+            break;
+          
+          // CSV files
+          case 'csv':
+            determinedType = 'csv-custom';
+            setFormatIcon(() => FileSpreadsheet);
+            break;
+          
+          // OpenDocument formats
+          case 'odt': determinedType = 'unsupported'; setFormatIcon(() => FileText); break;
+          case 'ods': determinedType = 'unsupported'; setFormatIcon(() => FileSpreadsheet); break;
+          case 'odp': determinedType = 'unsupported'; setFormatIcon(() => FileText); break;
+          
+          // Default - unknown format
+          default:
+            determinedType = 'unsupported';
+            setFormatIcon(() => File);
+        }
+
+        setFileType(determinedType);
+        
+        // Set loading false if not handled by async fetch
+        if (!['docx-custom', 'txt-custom'].includes(determinedType)) {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error determining file type:', err);
+        setError('Failed to determine document type');
         setLoading(false);
-      }, 3000);
-    } else if (docType === 'office') {
-      console.log("[DocumentViewer] Using Office document simplified preview");
-      // For Office documents, use the simplified preview and short timeout
-      setTimeout(() => {
-        console.log("[DocumentViewer] Setting Office document loading complete");
+      }
+    };
+
+    // Custom function to fetch text content for TXT files
+    const fetchTextContent = async (url) => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch text: ${response.status} ${response.statusText}`);
+        }
+        const text = await response.text();
+        
+        // Limit text to a reasonable preview length
+        const maxPreviewLength = 5000;
+        const previewText = text.length > maxPreviewLength 
+          ? text.substring(0, maxPreviewLength) + '...' 
+          : text;
+        
+        setTextContent(previewText);
         setLoading(false);
-      }, 1000);
-    } else {
-      console.log("[DocumentViewer] Using generic preview for", docType);
-      // For other types, use a moderate timeout
-      setTimeout(() => setLoading(false), 1500);
-    }
-    
-    // Safety timeout to ensure loading never gets stuck
-    const safetyTimeout = setTimeout(() => {
-      console.log("[DocumentViewer] Safety timeout triggered - forcing loading complete");
-      setLoading(false);
-    }, 5000);
+      } catch (err) {
+        console.error('Error fetching text content:', err);
+        setError('Failed to load text document');
+        setLoading(false);
+      }
+    };
+
+    determineFileType();
+  }, [documentUrl, documentType]);
+
+  // Add event handlers to prevent scrolling in the document viewer
+  useEffect(() => {
+    const preventScroll = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    // Get all scrollable elements within the viewer
+    const handleViewerMounted = () => {
+      if (viewerRef.current) {
+        // Find all scrollable elements within the viewer
+        const scrollableElements = viewerRef.current.querySelectorAll('div, iframe');
+        
+        scrollableElements.forEach(element => {
+          // Apply no-scroll styles to elements
+          if (element.scrollHeight > element.clientHeight) {
+            element.style.overflow = 'hidden';
+            element.style.maxHeight = '600px';
+            element.addEventListener('wheel', preventScroll, { passive: false });
+            element.addEventListener('touchmove', preventScroll, { passive: false });
+          }
+        });
+      }
+    };
+
+    // Apply after a short delay to ensure the viewer is mounted
+    const timeoutId = setTimeout(handleViewerMounted, 1000);
     
     return () => {
-      clearTimeout(safetyTimeout);
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
+      clearTimeout(timeoutId);
+      if (viewerRef.current) {
+        const scrollableElements = viewerRef.current.querySelectorAll('div, iframe');
+        scrollableElements.forEach(element => {
+          element.removeEventListener('wheel', preventScroll);
+          element.removeEventListener('touchmove', preventScroll);
+        });
       }
     };
-  }, [documentUrl, getFileExtension, getDocumentType, shouldUseSimplifiedPreview]);
+  }, [loading, fileType]);
 
-  // Get the document format to show the appropriate icon and name
-  const formatName = (() => {
-    if (!documentUrl) return 'Unknown Format';
-    const extension = getFileExtension(documentUrl);
-    
-    const formatMap = {
-      pdf: 'PDF Document',
-      doc: 'Word Document',
-      docx: 'Word Document',
-      xls: 'Excel Spreadsheet',
-      xlsx: 'Excel Spreadsheet',
-      ppt: 'PowerPoint Presentation',
-      pptx: 'PowerPoint Presentation',
-      txt: 'Text File',
-      csv: 'CSV File',
-      jpg: 'JPEG Image',
-      jpeg: 'JPEG Image',
-      png: 'PNG Image',
-      gif: 'GIF Image',
-      html: 'HTML Document',
-      htm: 'HTML Document',
-      json: 'JSON File',
-    };
-    
-    return formatMap[extension] || 'Unknown Format';
-  })();
-  
-  // Get the icon for the document type
-  const formatIcon = (() => {
-    if (!documentUrl) return FileCog;
-    const extension = getFileExtension(documentUrl);
-    
-    const iconMap = {
-      pdf: FileText,
-      doc: FileText,
-      docx: FileText,
-      xls: FileSpreadsheet,
-      xlsx: FileSpreadsheet,
-      ppt: FileText,
-      pptx: FileText,
-      txt: FileText,
-      csv: FileSpreadsheet,
-      jpg: ImageIcon,
-      jpeg: ImageIcon,
-      png: ImageIcon,
-      gif: ImageIcon,
-      html: FileCode,
-      htm: FileCode,
-      json: FileCode,
-    };
-    
-    return iconMap[extension] || FileCog;
-  })();
-  
-  // Get document display name
-  const displayName = documentUrl ? documentUrl.split('/').pop() : 'Document';
-
-  // Custom header override for the DocViewer
-  const headerOverride = () => {
-    return null; // We're using our own header
-  };
-
-// Add event listener to prevent right-click downloads and limit scrolling
-useEffect(() => {
-  if (!viewerRef.current) return;
-  
-  // Function to prevent scroll beyond the limit
-  const hardLimitScroll = () => {
-    // Get the actual preview limit percentage
-    const previewLimitPercent = previewLimit ? previewLimit / 100 : 0.5;
-    
-    // Find all scrollable elements using a comprehensive selector
-    const scrollableElements = document.querySelectorAll([
-      '#react-doc-viewer div[style*="overflow"]', 
-      '#react-doc-viewer div[style*="scroll"]',
-      '.pg-viewer-wrapper',
-      '.react-pdf__Document',
-      '.office-wrapper',
-      '[id^="pdf-"]',
-      '.docx-viewer',
-      '.xlsx-viewer',
-      '.csv-viewer',
-      '.pdf-viewer',
-      '.react-pdf__Page',
-      '#react-doc-viewer iframe',
-      '#react-doc-viewer [class*="viewer-"]'
-    ].join(','));
-    
-    console.log("[DocumentViewer] Found scrollable elements:", scrollableElements.length);
-    
-    scrollableElements.forEach(element => {
-      if (element.scrollHeight > element.clientHeight) {
-        console.log("[DocumentViewer] Applying scroll limit to:", element);
-        
-        // Special handling for single-page docs
-        if (pageCount <= 1) {
-          element.style.overflowY = 'hidden';
-          console.log("[DocumentViewer] Disabled scrolling for single page");
-          return;
-        }
-        
-        // Calculate maximum allowed scroll position
-        const maxScrollTop = Math.floor(element.scrollHeight * previewLimitPercent);
-        
-        // Create a scroll handler that absolutely enforces the limit
-        const enforceScrollLimit = (e) => {
-          if (element.scrollTop > maxScrollTop) {
-            // Using requestAnimationFrame for smoother limit enforcing
-            requestAnimationFrame(() => {
-              element.scrollTop = maxScrollTop;
-            });
-          }
-        };
-        
-        // Add scroll event directly to the element
-        element.onscroll = enforceScrollLimit;
-        
-        // Apply wheel event handler to prevent mouse wheel scrolling past limit
-        element.addEventListener('wheel', (e) => {
-          if (element.scrollTop >= maxScrollTop && e.deltaY > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }, { passive: false, capture: true });
-        
-        // Handle touch events for mobile devices
-        element.addEventListener('touchmove', (e) => {
-          if (element.scrollTop >= maxScrollTop) {
-            element.scrollTop = maxScrollTop;
-          }
-        }, { passive: false, capture: true });
-        
-        // Immediately apply the limit
-        enforceScrollLimit();
-      }
-    });
-  };
-  
-  // Context menu prevention
-  const preventContextMenu = (e) => {
-    if (viewerRef.current && viewerRef.current.contains(e.target)) {
-      e.preventDefault();
-      return false;
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(documentUrl);
+      const blob = await response.blob();
+      saveAs(blob, fileName);
+    } catch (err) {
+      console.error('Download error:', err);
+      setError('Failed to download document');
     }
   };
 
-  // Keyboard shortcut prevention
-  const preventKeyboardShortcuts = (e) => {
-    if (viewerRef.current && viewerRef.current.contains(e.target)) {
-        // Prevent common shortcuts for save, print, etc.
-        if ((e.ctrlKey || e.metaKey) && 
-            (e.key === 's' || e.key === 'p' || e.key === 'e' || e.key === 'o' || e.key === 'd')) {
-            e.preventDefault();
-            return false;
-      }
-    }
+  const onError = (e) => {
+    console.error('Error in file viewer:', e);
+    setError('Failed to preview document');
   };
 
-    // Prevent copy/paste operations
-  const preventCopyPaste = (e) => {
-    if (viewerRef.current && viewerRef.current.contains(e.target)) {
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v')) {
-          e.preventDefault();
-          return false;
-        }
-      }
-    };
-    
-    // Prevent wheel + key shortcuts (e.g., Ctrl+wheel for zoom)
-    const preventWheelScroll = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.type === 'wheel') {
-        e.preventDefault();
-        return false;
-      }
-    };
-    
-    // Apply all prevention techniques
-    hardLimitScroll();
-  document.addEventListener('contextmenu', preventContextMenu);
-  document.addEventListener('keydown', preventKeyboardShortcuts);
-    document.addEventListener('keydown', preventCopyPaste);
-    document.addEventListener('wheel', preventWheelScroll, { passive: false });
-    
-    // Set multiple timeouts to catch delayed rendering
-    setTimeout(hardLimitScroll, 1000);
-    setTimeout(hardLimitScroll, 2000);
-    setTimeout(hardLimitScroll, 3000);
-    setTimeout(hardLimitScroll, 5000);
-    
-    // Clean up
-  return () => {
-    document.removeEventListener('contextmenu', preventContextMenu);
-    document.removeEventListener('keydown', preventKeyboardShortcuts);
-      document.removeEventListener('keydown', preventCopyPaste);
-      document.removeEventListener('wheel', preventWheelScroll);
-    };
-  }, [pageCount, viewerRef, previewLimit]);
+  // Custom component for rendering text files
+  const TextViewer = ({ text }) => (
+    <div className="relative">
+      <div className="h-[600px] overflow-hidden touch-none p-4 bg-white font-mono text-sm" ref={viewerRef}>
+        <pre className="whitespace-pre-wrap break-words">
+          {text}
+        </pre>
+      </div>
+      
+      {/* Blur overlay covering exactly bottom half of visible content */}
+      <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
+        {/* Sharp blur transition with clear demarcation line */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+        
+        {/* Subtle divider line to clearly indicate where preview ends */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+        
+        {/* Lock icon and message */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+            <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+            <p className="text-base font-medium">Contact us for the full document</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Only the top portion of the text is available for preview
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
-  // Render the document based on its type
-  const renderDocument = () => {
-    if (error) {
-      return <CustomErrorComponent errorComponent={error} />;
-    }
-
-    const extension = getFileExtension(documentUrl);
-    const docType = getDocumentType(extension);
-    
-    // Use simplified preview for office documents
-    if (shouldUseSimplifiedPreview(extension)) {
-  return (
-        <DocumentTypePreview 
-          type="office" 
-          extension={extension}
-          displayName={displayName}
-          formatName={formatName}
-          documentUrl={documentUrl}
-        />
-      );
-    }
-
-    // For web-friendly documents, use DocViewer
-  return (
-      <BlurOverlay document={document} previewLimit={previewLimit} pageCount={pageCount}>
-          <DocViewer
-            documents={[{ uri: documentUrl }]}
-            pluginRenderers={DocViewerRenderers}
-            style={{ height: 600 }}
-            config={{
-              header: {
-                disableFileName: true,
-                disableHeader: false,
-                overrideComponent: headerOverride,
-                retainURLParams: false
-              },
-              pdfZoom: {
-                defaultZoom: 1,
-                zoomJump: 0.2
-              },
-              pdfVerticalScrollByDefault: true
-            }}
-            theme={{
-              primary: "var(--primary)",
-              secondary: "var(--background)",
-              tertiary: "var(--muted)",
-              text_primary: "var(--foreground)",
-              text_secondary: "var(--muted-foreground)",
-              text_tertiary: "var(--muted-foreground)",
-              disableThemeScrollbar: false
-            }}
-          onLoadError={(error) => {
-            console.error("[DocumentViewer] DocViewer load error:", error);
-            setError("Failed to load document: " + (error?.message || "Unknown error"));
-            setLoading(false);
-          }}
-          prefetchMethod="GET"
-          requestHeaders={{
-            Accept: "*/*",
-            }}
-          />
-        </BlurOverlay>
-    );
-  };
-
-  // Main render function inside the component
-  function MainRender() {
-    return (
-      <div className={cn("relative bg-white rounded-md shadow overflow-hidden", className)}>
-        {/* Document Header */}
-        <div className="px-4 py-3 border-b flex items-center justify-between bg-background">
-          <div className="flex items-center">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 mr-3">
-              {React.createElement(formatIcon, { className: "h-4 w-4 text-primary" })}
-            </span>
-            <div>
-              <h3 className="text-sm font-medium line-clamp-1">{displayName}</h3>
-              <p className="text-xs text-muted-foreground">{formatName}</p>
+  // Custom component for PowerPoint presentations
+  const PowerPointViewer = () => (
+    <div className="relative">
+      <div className="h-[600px] overflow-hidden touch-none flex flex-col items-center justify-center bg-slate-100 p-6" ref={viewerRef}>
+        {/* More professional slide container with shadow */}
+        <div className="w-full max-w-xl aspect-video bg-white rounded-lg shadow-lg flex flex-col border border-slate-200">
+          {/* More elegant slide header with gradient */}
+          <div className="h-14 bg-gradient-to-r from-blue-600 to-indigo-700 flex items-center px-6">
+            <div className="h-4 w-48 bg-white/40 rounded-md"></div>
+          </div>
+          
+          {/* Slide content with more realistic spacing and elements */}
+          <div className="flex-1 p-8 flex flex-col gap-4">
+            {/* Title with better dimensions */}
+            <div className="h-9 w-4/5 bg-slate-300 rounded-md"></div>
+            
+            {/* Subtitle with better contrast */}
+            <div className="h-6 w-2/3 bg-slate-200 rounded-md"></div>
+            
+            {/* Content lines with visual hierarchy */}
+            <div className="mt-2 space-y-3">
+              <div className="h-4 w-full bg-slate-100 rounded-md"></div>
+              <div className="h-4 w-11/12 bg-slate-100 rounded-md"></div>
+              <div className="h-4 w-3/4 bg-slate-100 rounded-md"></div>
+            </div>
+            
+            {/* Visual elements with better spacing and dimensions */}
+            <div className="mt-6 flex gap-4">
+              <div className="h-20 w-24 bg-blue-100 rounded-md border border-blue-200 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-full bg-blue-400"></div>
+              </div>
+              <div className="h-20 w-24 bg-indigo-100 rounded-md border border-indigo-200 flex items-center justify-center">
+                <div className="w-12 h-8 bg-indigo-400 rounded-sm"></div>
+              </div>
+              <div className="h-20 w-24 bg-purple-100 rounded-md border border-purple-200 flex items-center justify-center">
+                <div className="w-8 h-8 bg-purple-400 rounded-md"></div>
+              </div>
             </div>
           </div>
         </div>
-
-        <div className="min-h-[600px] bg-background">
-          {loading ? (
-            <div className="h-[600px] flex flex-col items-center justify-center">
-              <div className="w-12 h-12 border-4 border-t-primary border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-              <p className="mt-4 text-muted-foreground">Loading document preview...</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {getFileExtension(documentUrl).match(/docx?|xlsx?|pptx?/) 
-                  ? "Office documents may take longer to process" 
-                  : "This should only take a moment"}
-              </p>
-            </div>
-          ) : (
-            renderDocument()
-      )}
+        
+        {/* Refined status text */}
+        <p className="text-center text-slate-600 mt-4 font-medium">
+          Preview of first slide
+        </p>
+      </div>
+      
+      {/* Enhanced blur overlay */}
+      <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
+        {/* Improved gradient blur effect */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-white/60 via-30% to-white/95 to-100% backdrop-blur-sm"></div>
+        
+        {/* More visible divider line */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-blue-300"></div>
+        
+        {/* Enhanced lock message container */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="px-8 py-5 rounded-xl shadow-xl backdrop-blur-md bg-white/90 text-center border border-slate-200">
+            <Lock className="h-7 w-7 mx-auto mb-3 text-blue-600" />
+            <p className="text-lg font-semibold text-slate-800">Contact us for the full presentation</p>
+            <p className="text-slate-600 mt-2">
+              This preview shows only part of the first slide
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
+  );
 
-        {/* Add styles in a standard way instead of using Next.js style jsx global */}
-        <style dangerouslySetInnerHTML={{ __html: `
-      /* Override DocViewer styles */
-      #react-doc-viewer {
-        border: none !important;
-        height: 600px !important;
-        width: 100% !important;
-        position: relative !important; /* Ensure positioning context */
-        overflow: hidden !important; /* Critical - prevent scrolling on the container */
-      }
+  // Custom PDF Viewer component
+  const PDFViewer = () => (
+    <div className="relative h-[600px] overflow-hidden touch-none" ref={viewerRef}>
+      {/* Iframe container with explicit overflow hidden */}
+      <div className="absolute inset-0 overflow-hidden">
+        <iframe 
+          src={`${documentUrl}#toolbar=0&view=FitH`} 
+          className="w-full h-full border-0" /* Ensure no border */
+          title="PDF document preview"
+          scrolling="no" /* Attempt to disable scrolling attribute */
+          style={{ pointerEvents: 'none' }} /* Prevent direct interaction */
+        />
+      </div>
       
-      #react-doc-viewer #header-bar {
-        background-color: var(--background);
-        color: var(--foreground);
-        padding: 8px 16px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        height: 40px;
-      }
+      {/* Blur overlay covering exactly bottom half */}
+      <div className="absolute inset-x-0 bottom-0 h-[300px] z-20 pointer-events-none">
+        {/* Gradient and blur */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+        {/* Divider line */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+        {/* Lock icon and message - Allow pointer events here if needed for contact button, etc. */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto">
+          <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+            <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+            <p className="text-base font-medium">Contact us for the full document</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Only the top portion is available for preview
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Document Type Preview
+  const DocumentTypePreview = ({ type }) => {
+    const Icon = formatIcon;
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center">
+        <div className="bg-muted/30 p-6 rounded-xl mb-4">
+          <Icon className="h-16 w-16 text-primary" />
+        </div>
+        <h3 className="text-lg font-medium mb-2">{formatName} Document</h3>
+        <p className="text-muted-foreground mb-4">
+          {type} document preview available after contact.
+        </p>
+        <p className="text-sm text-muted-foreground">Contact us to access the full document.</p>
+      </div>
+    );
+  };
+
+  // NEW: Custom component for rendering DOCX HTML
+  const DocxViewer = ({ html }) => (
+    <div className="relative">
+      {/* Container for HTML with overflow hidden and basic document styling */}
+      <div 
+        ref={viewerRef} 
+        className="h-[600px] overflow-hidden touch-none p-8 bg-white docx-content prose max-w-none prose-sm md:prose-base"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
       
-      #react-doc-viewer .file-name {
-        font-weight: 500;
-        font-size: 14px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      
-      #react-doc-viewer .controls {
-        display: flex;
-        gap: 8px;
-      }
-      
-      #react-doc-viewer .controls button {
-        background-color: var(--primary);
-        color: white;
-        border: none;
-        padding: 4px 8px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-      }
-      
-      #react-doc-viewer .controls button:hover {
-        opacity: 0.9;
-      }
-      
-      #react-doc-viewer .controls button:disabled {
-        background-color: var(--muted);
-        cursor: not-allowed;
-      }
-      
-      /* Hide any download buttons that might be present in renderers */
-      #react-doc-viewer [data-testid="download-button"],
-      #react-doc-viewer button[aria-label="Download"],
-      #react-doc-viewer .download-button,
-      #react-doc-viewer button:has(svg[data-icon="download"]),
-      #react-doc-viewer a[aria-label*="download" i],
-      #react-doc-viewer a[title*="download" i],
-      #pdf-download,
-      .pdf-download,
-      [data-action="download"],
-      .pdf-controls button[title*="download" i],
-      .pdf-controls a[title*="download" i] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-      
-      /* Limit scrolling based on document page count */
-      .pg-viewer-wrapper,
-      .react-pdf__Document,
-      .office-wrapper,
-      #react-doc-viewer [class*="viewer-"],
-      .pdf-viewer,
-      .csv-viewer table,
-      .xlsx-viewer,
-      .docx-viewer,
-      .word-viewer,
-      .spreadsheet-viewer,
-      #pdf-viewer,
-      .react-pdf__Page,
-      .document-container,
-      [class*="docViewer-"],
-      #react-doc-viewer div[style*="overflow"],
-      #react-doc-viewer div[style*="scroll"] {
-        overflow-y: auto !important;
-        height: 600px !important;
-        max-height: 600px !important;
-        scroll-behavior: smooth !important;
-        position: relative !important; /* Ensure it has position context for the scroll blocker */
-        overscroll-behavior: contain !important; /* Prevent scroll chaining */
-        scroll-snap-type: y proximity !important; /* Helps with scroll positioning */
-        mask-image: linear-gradient(to bottom, 
-          rgba(0, 0, 0, 1) 0%,
-          rgba(0, 0, 0, 1) ${previewLimit || 50}%,
-          rgba(0, 0, 0, 0.8) ${(previewLimit || 50) + 10}%,
-          rgba(0, 0, 0, 0.3) ${(previewLimit || 50) + 20}%,
-          rgba(0, 0, 0, 0) 100%
-        ) !important;
-        -webkit-mask-image: linear-gradient(to bottom, 
-          rgba(0, 0, 0, 1) 0%,
-          rgba(0, 0, 0, 1) ${previewLimit || 50}%,
-          rgba(0, 0, 0, 0.8) ${(previewLimit || 50) + 10}%,
-          rgba(0, 0, 0, 0.3) ${(previewLimit || 50) + 20}%,
-          rgba(0, 0, 0, 0) 100%
-        ) !important;
-      }
-      
-      /* CSS to help prevent scrolling past limit */
-      .pg-viewer-wrapper::after,
-      .react-pdf__Document::after,
-      .office-wrapper::after,
-      #react-doc-viewer [class*="viewer-"]::after,
-      .pdf-viewer::after,
-      .csv-viewer::after,
-      .xlsx-viewer::after,
-      .docx-viewer::after {
-        content: '';
-        position: absolute;
-        top: ${previewLimit || 50}%;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(to bottom, 
-          transparent, 
-          rgba(255,255,255,0.7) 20%, 
-          rgba(255,255,255,0.9) 60%
+      {/* Blur overlay covering exactly bottom half */}
+      <div className="absolute inset-x-0 bottom-0 h-[300px] z-20 pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto">
+          <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+            <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+            <p className="text-base font-medium">Contact us for the full document</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Only the top portion is available for preview
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFileViewer = () => {
+    const IconComponent = formatIcon;
+    
+    if (fileType === 'unsupported') {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-center">
+          <IconComponent className="h-16 w-16 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">{formatName} Preview</h3>
+          <p className="text-muted-foreground mb-4">
+            This document type ({formatName}) cannot be previewed directly in the browser.
+          </p>
+          <p className="text-sm text-muted-foreground">Contact us for access to the full document.</p>
+        </div>
+      );
+    }
+    
+    // Use custom Text viewer for TXT files
+    if (fileType === 'txt-custom') {
+      return <TextViewer text={textContent} />;
+    }
+    
+    // Use custom viewers for document types
+    if (fileType === 'pdf-custom') {
+      return <PDFViewer />;
+    }
+    
+    // NEW: Render DOCX content
+    if (fileType === 'docx-custom') {
+      return <DocxViewer html={docxHtml} />;
+    }
+    
+    if (fileType === 'xlsx-custom') {
+      return <DocumentTypePreview type="Excel" />;
+    }
+    
+    if (fileType === 'csv-custom') {
+      return <DocumentTypePreview type="CSV" />;
+    }
+    
+    // Use custom PowerPoint viewer for PPTX files
+    if (fileType === 'pptx-custom') {
+      return <PowerPointViewer />;
+    }
+
+    // For image formats, use the native img tag for better display
+    if (fileType === 'jpg' || fileType === 'png' || fileType === 'gif') {
+      return (
+        <div className="relative">
+          <div className="h-[600px] overflow-hidden touch-none flex items-center justify-center bg-black/5" ref={viewerRef}>
+            <img 
+              src={documentUrl} 
+              alt={fileName}
+              className="max-h-full object-contain" 
+            />
+          </div>
+          
+          {/* Blur overlay covering exactly bottom half of visible content */}
+          <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
+            {/* Sharp blur transition with clear demarcation line */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+            
+            {/* Subtle divider line to clearly indicate where preview ends */}
+            <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+            
+            {/* Lock icon and message */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+                <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+                <p className="text-base font-medium">Contact us for the full image</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Only a partial preview is available
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback to using react-file-viewer for any other supported type (though we handle most now)
+    if (fileType && fileType !== 'unsupported' && !fileType.endsWith('-custom')) {
+      try {
+        return (
+          <div className="relative">
+            {/* Document viewer set to show exactly one page height with overflow hidden */}
+            <div className="h-[600px] overflow-hidden touch-none" ref={viewerRef}>
+              {/* Invisible overlay to catch all mouse events and prevent interaction */}
+              <div className="absolute inset-0 z-10" 
+                  style={{ pointerEvents: 'none' }}></div>
+              
+              <FileViewer
+                fileType={fileType}
+                filePath={documentUrl}
+                onError={onError}
+                errorComponent={CustomErrorComponent}
+              />
+            </div>
+            
+            {/* Blur overlay covering exactly bottom half of visible content */}
+            <div className="absolute inset-x-0 bottom-0 h-[300px] z-20">
+              {/* Sharp blur transition with clear demarcation line */}
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-background/40 via-20% to-background/95 to-100% backdrop-blur-[3px]"></div>
+              
+              {/* Subtle divider line to clearly indicate where preview ends */}
+              <div className="absolute top-0 inset-x-0 h-[1px] bg-primary/20"></div>
+              
+              {/* Lock icon and message */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="glass-card px-6 py-4 rounded-lg shadow-lg backdrop-blur-md bg-background/80 text-center">
+                  <Lock className="h-6 w-6 mx-auto mb-2 text-primary" />
+                  <p className="text-base font-medium">Contact us for the full document</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Only the top half of the first page is available for preview
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         );
-        pointer-events: none;
-        z-index: 30;
+      } catch (error) {
+        console.error("Error in FileViewer fallback:", error);
+        return <CustomErrorComponent />;
       }
-      
-      /* Physical blocker to prevent scrolling past limit */
-      .scroll-physical-blocker {
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: ${previewLimit || 50}%;
-        bottom: 0;
-        background: transparent;
-        z-index: 1000;
-        pointer-events: all !important;
-      }
-        `}} />
-  </div>
-); 
+    }
+
+    // If we reach here, it's likely unsupported or still loading the custom viewers
+    return <CustomErrorComponent />; // Show error or a loading state if appropriate
+  };
+
+  // Custom error component for FileViewer
+  const CustomErrorComponent = ({ errorComponent }) => {
+    const IconComponent = formatIcon;
+    
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center">
+        <IconComponent className="h-10 w-10 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">{formatName} Preview</h3>
+        <p className="text-muted-foreground">There was a problem displaying this document</p>
+        <p className="text-sm text-muted-foreground mt-4">Please contact us for the full document.</p>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className={cn("flex flex-col items-center justify-center p-8", className)}>
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-muted-foreground">Loading document preview...</p>
+      </div>
+    );
   }
 
-  // Then use it in the actual component return
-  return <MainRender />;
-}
+  if (error) {
+    const IconComponent = formatIcon;
+    
+    return (
+      <div className={cn("flex flex-col items-center justify-center p-8 text-center", className)}>
+        <AlertCircle className="h-10 w-10 text-destructive mb-4" />
+        <h3 className="text-lg font-medium mb-2">Error Loading {formatName}</h3>
+        <p className="text-muted-foreground">{error}</p>
+        <p className="text-sm text-muted-foreground mt-4">Please contact support to access this document.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("rounded-md overflow-hidden border", className)}>
+      {renderFileViewer()}
+      <div className="p-3 bg-muted/20 border-t flex justify-between items-center">
+        <span className="text-sm text-muted-foreground">
+          {fileName}
+        </span>
+        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+          {formatName} Document
+        </span>
+      </div>
+    </div>
+  );
+};
+
+export default DocumentViewer;
