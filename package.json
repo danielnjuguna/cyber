@@ -14,7 +14,9 @@
     "preview": "vite preview",
     "reset-db": "node scripts/reset-db.js",
     "update-schema": "node scripts/update-schema.js",
-    "render-build": "npm cache clean --force && npm install uploadthing && vite build && cp server.js dist/ && mkdir -p dist/api && cp -r api/* dist/api/ && mkdir -p dist/api/files && cp api/files/index.js dist/api/files/ && mkdir -p dist/lib && cp -r lib/* dist/lib/ && mkdir -p dist/middlewares && cp -r middlewares/* dist/middlewares/ && echo 'File structure after build:' && ls -la ./dist && ls -la ./dist/api && ls -la ./dist/api/files && ls -la ./dist/middlewares"
+    "add-superadmin": "node scripts/add-superadmin.js",
+    "promote-superadmin": "node scripts/promote-superadmin.js",
+    "render-build": "npm cache clean --force && npm install uploadthing && vite build && cp server.js dist/ && mkdir -p dist/api && cp -r api/* dist/api/ && mkdir -p dist/api/files && cp api/files/index.js dist/api/files/ && mkdir -p dist/lib && cp -r lib/* dist/lib/ && mkdir -p dist/middlewares && cp -r middlewares/* dist/middlewares/ && echo 'Make sure init.js is in the lib directory' && ls -la ./dist/lib && echo 'File structure after build:' && ls -la ./dist && ls -la ./dist/api && ls -la ./dist/api/files && ls -la ./dist/middlewares"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

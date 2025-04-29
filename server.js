@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import { testConnection } from './lib/db.js';
+import { initializeSystem } from './lib/init.js'; // Import our initialization script
 import path from 'path';
 import fs from 'fs';
 import { createRouteHandler } from "uploadthing/express"; // Import the official handler
@@ -273,7 +274,7 @@ const setupRoutes = async () => {
          console.error('    ❌ Error configuring UploadThing createRouteHandler:', utError);
          app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable due to config error' }));
       }
-    } else {
+        } else {
       console.warn('    ⚠️ UploadThing secrets not found, /api/uploadthing route disabled.');
       app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing not configured' }));
     }
@@ -313,6 +314,7 @@ const createUploadDirectories = () => {
   }
 };
 
+// --- Start Server Function ---
 const startServer = async () => {
   try {
     console.log(`Starting server in ${process.env.NODE_ENV} mode`);
@@ -320,7 +322,13 @@ const startServer = async () => {
     console.log(`Is Render environment: ${isRenderEnvironment}`);
     
     // Test database connection
-    await testConnection();
+    const dbConnected = await testConnection();
+    if (!dbConnected) {
+      console.error('Database connection test failed. Server will start but functionality will be limited.');
+    } else {
+      // Run system initialization if database is connected
+      await initializeSystem();
+    }
     
     // Create upload directories
     createUploadDirectories();
@@ -348,10 +356,10 @@ const startServer = async () => {
         app.get('*', (req, res) => {
           res.sendFile(indexHtmlPath);
         });
-      } else {
+       } else {
         console.error('ERROR: dist/index.html does not exist at:', indexHtmlPath);
         console.log('dist directory contains:', fs.readdirSync(distPath));
-      }
+       }
     }
 
     // Update the listen log message

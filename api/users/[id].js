@@ -21,13 +21,14 @@ async function checkAdminAuth(req, res) {
       res.status(401).json({ message: 'User not found or invalid token' });
       return null;
     }
-    if (users[0].role !== 'admin') {
-      console.log(`Admin Auth Error: User ID ${decoded.id} is not an admin`);
+    // Accept both admin and superadmin roles
+    if (users[0].role !== 'admin' && users[0].role !== 'superadmin') {
+      console.log(`Admin Auth Error: User ID ${decoded.id} is not an admin or superadmin`);
       res.status(403).json({ message: 'Admin access required' });
       return null;
     }
     console.log(`Admin authenticated: User ID ${decoded.id}`);
-    return decoded;
+    return { ...decoded, role: users[0].role }; // Return with current role
   } catch (error) {
     console.error('Admin Auth Error:', error.message || error);
     if (error.name === 'JsonWebTokenError') {
@@ -43,68 +44,56 @@ async function checkAdminAuth(req, res) {
 
 // --- Main Handler ---
 export default async function handler(req, res) {
-  // --- Check Admin Auth (Ensures requester is at least admin) ---
+  // --- Check Admin Auth ---
   const authenticatedUser = await checkAdminAuth(req, res);
   if (!authenticatedUser) {
-    return; // Response already sent
+    // If auth failed, the checkAdminAuth function already sent the response
+    return;
   }
+  // User is authenticated as admin, proceed...
 
-  // --- Get target user ID ---
-  const { id: userId } = req.params; 
-  console.log(`Request received for user ID: ${userId}, Method: ${req.method}`);
-
-  if (!userId || isNaN(parseInt(userId))) {
-      return res.status(400).json({ message: 'Invalid user ID provided' });
+  // Get target user ID from the URL path parameter
+  const targetUserId = req.query.id;
+  if (!targetUserId) {
+    console.log('Missing user ID in request');
+    return res.status(400).json({ message: 'Missing user ID in request' });
   }
-  const targetUserId = parseInt(userId);
 
   // --- Route based on HTTP method ---
   if (req.method === 'GET') {
-    // --- Handle GET: Get user by ID (Admin) ---
+    // --- Handle GET: Get specific user (Admin) ---
     try {
+      console.log(`GET /api/users/${targetUserId} request (admin)`);
       const [users] = await pool.execute(
-        'SELECT id, email, phone, role, created_at FROM users WHERE id = ?',
+        'SELECT id, email, phone, role, created_at, updated_at FROM users WHERE id = ?',
         [targetUserId]
       );
 
-      if (!Array.isArray(users) || users.length === 0) {
+      if (!users || users.length === 0) {
         return res.status(404).json({ message: 'User not found' });
       }
-      const user = users[0];
-      return res.status(200).json({ user });
 
+      return res.status(200).json({ user: users[0] });
     } catch (error) {
-      console.error(`Get user by ID (${targetUserId}) error:`, error);
+      console.error(`Get user (${targetUserId}) error:`, error);
       if (error.sqlMessage) console.error('SQL Error:', error.sqlMessage);
       return res.status(500).json({ message: 'Server error fetching user' });
     }
 
   } else if (req.method === 'PUT') {
-    // --- Handle PUT: Update user (Admin/Superadmin) ---
+    // --- Handle PUT: Update user (Admin) ---
     const { email, phone, password, role } = req.body;
-    console.log(`PUT /api/users/${targetUserId} request`, { requestedRole: role, adminId: authenticatedUser.id });
-
-    // *** Superadmin Check for ROLE CHANGE to admin/superadmin ***
-    if (role && (role === 'admin' || role === 'superadmin') && authenticatedUser.role !== 'superadmin') {
-      console.log(`   ❌ Permission Denied: Admin ID ${authenticatedUser.id} (Role: ${authenticatedUser.role}) attempted to set role '${role}' for user ${targetUserId}. Superadmin required.`);
-      return res.status(403).json({ message: 'Only superadmins can assign or change roles to admin or superadmin.' });
-    }
-    // *** End Superadmin Check ***
-
-    // Validate role if provided
-    if (role) {
-        const allowedRoles = ['user', 'staff', 'admin', 'superadmin'];
-        if (!allowedRoles.includes(role)) {
-            return res.status(400).json({ message: `Invalid role specified. Allowed roles: ${allowedRoles.join(', ')}` });
-        }
-    }
+    console.log(`PUT /api/users/${targetUserId} request (admin)`, { email, phone, role, password: password ? '******' : undefined });
 
     try {
       // Check if user exists (though technically redundant if GET worked, good practice)
-       const [existingUsers] = await pool.execute('SELECT id FROM users WHERE id = ?', [targetUserId]);
+       const [existingUsers] = await pool.execute('SELECT id, role FROM users WHERE id = ?', [targetUserId]);
        if (!existingUsers || existingUsers.length === 0) {
            return res.status(404).json({ message: 'User not found' });
        }
+
+      // Get the current user's role before update
+      const currentUserRole = existingUsers[0].role;
 
       // Start building the update query
       let query = 'UPDATE users SET ';
@@ -112,7 +101,6 @@ export default async function handler(req, res) {
       const updateFields = [];
 
       if (email) {
-        // Optional: Add validation for email format if needed
         updateFields.push('email = ?');
         params.push(email);
       }
@@ -120,11 +108,22 @@ export default async function handler(req, res) {
         updateFields.push('phone = ?');
         params.push(phone || null);
       }
+      
+      // If role change is requested, check if user is a superadmin
       if (role) {
-        // Optional: Add validation for role enum ('user', 'admin')
+        // If the role is being changed or if changing to superadmin, require superadmin
+        if (role !== currentUserRole || role === 'superadmin') {
+          // Only superadmin can change roles or assign superadmin role
+          if (authenticatedUser.role !== 'superadmin') {
+            return res.status(403).json({ 
+              message: 'Only Super Admins can change user roles'
+            });
+          }
+        }
         updateFields.push('role = ?');
         params.push(role);
       }
+      
       if (password) {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
@@ -163,51 +162,58 @@ export default async function handler(req, res) {
       );
 
       if (!updatedUserData || updatedUserData.length === 0) {
-          console.error(`Failed to retrieve user ${targetUserId} after update.`);
-          return res.status(404).json({ message: 'User not found after update.' });
+        console.error(`Failed to retrieve updated user data after admin update for ID: ${targetUserId}`);
+        return res.status(500).json({ message: 'Failed to retrieve user data after update' });
       }
 
+      const updatedUser = updatedUserData[0];
+
       return res.status(200).json({
-        message: 'User updated successfully',
-        user: updatedUserData[0]
+        message: 'User updated successfully by admin',
+        user: updatedUser
       });
 
     } catch (error) {
       console.error(`Update user (${targetUserId}) error:`, error);
       if (error.sqlMessage) console.error('SQL Error:', error.sqlMessage);
       if (error.code === 'ER_DUP_ENTRY') {
-          return res.status(400).json({ message: 'Another user with this email already exists.' });
+          return res.status(400).json({ message: 'A user with this email already exists.' });
       }
       return res.status(500).json({ message: 'Server error updating user' });
     }
 
   } else if (req.method === 'DELETE') {
-    // --- Handle DELETE: Delete user (Admin/Superadmin) ---
-    console.log(`DELETE /api/users/${targetUserId} request by admin ${authenticatedUser.id}`);
+    // --- Handle DELETE: Delete user (Admin) ---
+    console.log(`DELETE /api/users/${targetUserId} request (admin)`);
+
     try {
-       // Check if target user exists and get their role
-       const [targetUsers] = await pool.execute('SELECT id, role FROM users WHERE id = ?', [targetUserId]);
-       if (!targetUsers || targetUsers.length === 0) {
-           return res.status(404).json({ message: 'User to be deleted not found' });
-       }
-       const targetUserRole = targetUsers[0].role;
+      // Check if attempting to delete a superadmin (only superadmins can delete superadmins)
+      const [userToDelete] = await pool.execute(
+        'SELECT id, role FROM users WHERE id = ?',
+        [targetUserId]
+      );
+      
+      if (!userToDelete || userToDelete.length === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // If trying to delete a superadmin, require superadmin privileges
+      if (userToDelete[0].role === 'superadmin' && authenticatedUser.role !== 'superadmin') {
+        return res.status(403).json({ 
+          message: 'Only Super Admins can delete Super Admin users'
+        });
+      }
 
-       // *** Superadmin Check for DELETING admin/superadmin ***
-       if ((targetUserRole === 'admin' || targetUserRole === 'superadmin') && authenticatedUser.role !== 'superadmin') {
-           console.log(`   ❌ Permission Denied: Admin ID ${authenticatedUser.id} (Role: ${authenticatedUser.role}) attempted to delete user ${targetUserId} (Role: ${targetUserRole}). Superadmin required.`);
-           return res.status(403).json({ message: 'Only superadmins can delete admin or superadmin users.' });
-       }
-       // *** End Superadmin Check ***
-       
-       // Allow admin/superadmin to delete 'user' or 'staff' roles
-       console.log(`   ✅ Permission granted: Admin ${authenticatedUser.id} deleting user ${targetUserId} (Role: ${targetUserRole})`);
+      // Execute the delete operation
+      const [result] = await pool.execute(
+        'DELETE FROM users WHERE id = ?',
+        [targetUserId]
+      );
 
-      // Delete user
-      const [deleteResult] = await pool.execute('DELETE FROM users WHERE id = ?', [targetUserId]);
-
-      if (deleteResult.affectedRows === 0) {
-          console.error(`Delete failed for user ${targetUserId}, affectedRows was 0.`);
-          return res.status(404).json({ message: 'User not found or already deleted.' });
+      // Check if the operation was successful
+      if (result.affectedRows === 0) {
+        console.log(`Delete failed: User ID ${targetUserId} not found or already deleted`);
+        return res.status(404).json({ message: 'User not found or already deleted.' });
       }
 
       return res.status(200).json({ message: 'User deleted successfully' });

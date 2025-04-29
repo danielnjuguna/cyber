@@ -100,9 +100,9 @@ const AdminUsers = () => {
     }
   };
 
-  // Redirect if not authenticated or not admin
+  // Redirect if not authenticated or not admin/superadmin
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || !user || user.role !== 'admin')) {
+    if (!isLoading && (!isAuthenticated || !user || (user.role !== 'admin' && user.role !== 'superadmin'))) {
       navigate('/login');
     }
   }, [isAuthenticated, isLoading, user, navigate]);
@@ -141,6 +141,9 @@ const AdminUsers = () => {
       role: value,
     }));
   };
+
+  // Check if current user is a superadmin
+  const isSuperAdmin = user && user.role === 'superadmin';
 
   const handleAddUser = async () => {
     try {
@@ -322,9 +325,11 @@ const AdminUsers = () => {
                       <TableCell>{user.phone || "-"}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          user.role === 'admin' 
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-800/20 dark:text-purple-400' 
-                            : 'bg-blue-100 text-blue-800 dark:bg-blue-800/20 dark:text-blue-400'
+                          user.role === 'superadmin' 
+                            ? 'bg-red-100 text-red-800 dark:bg-red-800/20 dark:text-red-400'
+                            : user.role === 'admin' 
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-800/20 dark:text-purple-400' 
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-800/20 dark:text-blue-400'
                         }`}>
                           {user.role || 'user'}
                         </span>
@@ -422,6 +427,7 @@ const AdminUsers = () => {
               <Select
                 value={formData.role}
                 onValueChange={handleRoleChange}
+                disabled={!isSuperAdmin && (formData.role === 'admin' || formData.role === 'superadmin')}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a role" />
@@ -429,10 +435,12 @@ const AdminUsers = () => {
                 <SelectContent>
                   <SelectItem value="user">User</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
+                  {isSuperAdmin && <SelectItem value="superadmin">Super Admin</SelectItem>}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                <strong>Admin</strong>: Full access to all features. <strong>User</strong>: Limited access.
+                <strong>Super Admin</strong>: Can manage all users including admins. <strong>Admin</strong>: Can manage content and regular users. <strong>User</strong>: Limited access.
+                {!isSuperAdmin && <span className="block mt-1 text-amber-600 dark:text-amber-400">Note: Only Super Admins can change user roles to Admin or Super Admin.</span>}
               </p>
             </div>
           </div>
@@ -515,6 +523,7 @@ const AdminUsers = () => {
                 <Select
                   value={formData.role}
                   onValueChange={handleRoleChange}
+                  disabled={!isSuperAdmin && (formData.role === 'admin' || formData.role === 'superadmin')}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a role" />
@@ -522,10 +531,12 @@ const AdminUsers = () => {
                   <SelectContent>
                     <SelectItem value="user">User</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
+                    {isSuperAdmin && <SelectItem value="superadmin">Super Admin</SelectItem>}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  <strong>Admin</strong>: Full access to all features. <strong>User</strong>: Limited access.
+                  <strong>Super Admin</strong>: Can manage all users including admins. <strong>Admin</strong>: Can manage content and regular users. <strong>User</strong>: Limited access.
+                  {!isSuperAdmin && <span className="block mt-1 text-amber-600 dark:text-amber-400">Note: Only Super Admins can change user roles to Admin or Super Admin.</span>}
                 </p>
               </div>
             </div>

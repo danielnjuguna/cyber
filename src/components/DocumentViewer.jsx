@@ -27,7 +27,7 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
       setLoading(false);
       return;
     }
-
+    
     // Helper function to fetch and convert DOCX
     const fetchAndConvertDocx = async (url) => {
       console.log(`Attempting to fetch and convert DOCX: ${url}`);
@@ -309,7 +309,7 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
             </div>
           </div>
         </div>
-        
+
         {/* Refined status text */}
         <p className="text-center text-slate-600 mt-4 font-medium">
           Preview of first slide
@@ -331,8 +331,8 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
             <p className="text-lg font-semibold text-slate-800">Contact us for the full presentation</p>
             <p className="text-slate-600 mt-2">
               This preview shows only part of the first slide
-            </p>
-          </div>
+              </p>
+            </div>
         </div>
       </div>
     </div>
@@ -578,8 +578,8 @@ const DocumentViewer = ({ documentUrl, documentType, className }) => {
         <h3 className="text-lg font-medium mb-2">Error Loading {formatName}</h3>
         <p className="text-muted-foreground">{error}</p>
         <p className="text-sm text-muted-foreground mt-4">Please contact support to access this document.</p>
-      </div>
-    );
+  </div>
+); 
   }
 
   return (

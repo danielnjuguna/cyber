@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../lib/db.js'; // Updated import path
-import { generateToken } from '../../middlewares/auth.js'; // Needed if creating user returns token
+import { generateToken, checkSuperAdminAuth } from '../../middlewares/auth.js'; // Import checkSuperAdminAuth
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
@@ -36,16 +36,17 @@ async function checkAdminAuth(req, res) {
       return null; // Indicate auth failure
     }
 
-    if (users[0].role !== 'admin') { 
-      console.log(`   ❌ Admin Auth Error: User ID ${decoded.id} Role (${users[0].role}) is not admin`);
+    // Accept both admin and superadmin roles
+    if (users[0].role !== 'admin' && users[0].role !== 'superadmin') { 
+      console.log(`   ❌ Admin Auth Error: User ID ${decoded.id} Role (${users[0].role}) is not admin or superadmin`);
       res.status(403).json({ message: 'Admin access required' }); 
       return null; // Indicate auth failure
     }
 
     console.log(`   ✅ Admin authenticated: User ID ${decoded.id}`);
-    return decoded; // Return decoded token payload on success
+    return { ...decoded, role: users[0].role }; // Return decoded token payload on success with current role
 
-  } catch (error) { 
+  } catch (error) {
     console.error('   ❌ Admin Auth Error Caught:', error.name, error.message);
     if (error.name === 'JsonWebTokenError') {
         res.status(401).json({ message: 'Invalid token' });
@@ -64,9 +65,11 @@ export default async function handler(req, res) {
   // --- Check Admin Auth ---
   const authenticatedUser = await checkAdminAuth(req, res);
   if (!authenticatedUser) {
-    return; // Response already sent
+    // If auth failed, checkAdminAuth already sent the response
+    return;
   }
-  // User is authenticated as at least admin, proceed...
+  // User is authenticated as admin, proceed...
+
 
   // --- Route based on HTTP method ---
   if (req.method === 'GET') {
@@ -84,23 +87,9 @@ export default async function handler(req, res) {
     }
 
   } else if (req.method === 'POST') {
-    // --- Handle POST: Create new user (Admin/Superadmin) ---
-    const { email, phone, password, role = 'user' } = req.body; // Default role to 'user'
-    console.log('POST /api/users request', { requestedRole: role, adminId: authenticatedUser.id });
-
-    // *** Superadmin Check for assigning elevated roles ***
-    if ((role === 'admin' || role === 'superadmin') && authenticatedUser.role !== 'superadmin') {
-      console.log(`   ❌ Permission Denied: Admin ID ${authenticatedUser.id} (Role: ${authenticatedUser.role}) attempted to create user with role '${role}'. Superadmin required.`);
-      return res.status(403).json({ message: 'Only superadmins can assign admin or superadmin roles.' });
-    }
-    // *** End Superadmin Check ***
-    
-    // Allow admin/superadmin to create 'user' or 'staff' roles (or default)
-    // Validate role if needed (e.g., ensure it's one of ['user', 'staff', 'admin', 'superadmin'])
-    const allowedRoles = ['user', 'staff', 'admin', 'superadmin'];
-    if (!allowedRoles.includes(role)) {
-        return res.status(400).json({ message: `Invalid role specified. Allowed roles: ${allowedRoles.join(', ')}` });
-    }
+    // --- Handle POST: Create new user (Admin) ---
+    const { email, phone, password, role } = req.body;
+    console.log('POST /api/users request (admin)', { email, role });
 
     try {
       // Validate input
@@ -118,14 +107,31 @@ export default async function handler(req, res) {
         return res.status(400).json({ message: 'User already exists' });
       }
 
+      // If the request attempts to set a role, check if user is a superadmin
+      let userRole = 'user'; // Default role
+      if (role) {
+        // If trying to set admin or superadmin role, require superadmin
+        if (role === 'admin' || role === 'superadmin') {
+          // Only superadmin can assign admin or superadmin roles
+          if (authenticatedUser.role !== 'superadmin') {
+            return res.status(403).json({ 
+              message: 'Only Super Admins can assign admin or superadmin roles'
+            });
+          }
+          userRole = role;
+        } else {
+          userRole = role;
+        }
+      }
+
       // Hash password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Create user with the validated role
+      // Create user with specified role (default to 'user' if not provided)
       const [result] = await pool.execute(
         'INSERT INTO users (email, phone, password, role) VALUES (?, ?, ?, ?)',
-        [email, phone || null, hashedPassword, role] // Use the validated role
+        [email, phone || null, hashedPassword, userRole]
       );
 
       const userId = result.insertId;

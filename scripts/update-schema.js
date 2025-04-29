@@ -14,7 +14,10 @@ const alterCommands = [
   // Update the services table (Corrected Syntax)
   `ALTER TABLE services
    ADD COLUMN image_url VARCHAR(1024) NULL AFTER long_description,
-   ADD COLUMN image_key VARCHAR(255) NULL AFTER image_url;`
+   ADD COLUMN image_key VARCHAR(255) NULL AFTER image_url;`,
+  // Update the users table to ensure role allows superadmin value
+  `ALTER TABLE users
+   MODIFY COLUMN role ENUM('user', 'admin', 'superadmin') NOT NULL DEFAULT 'user';`
 ];
 
 async function updateSchema() {

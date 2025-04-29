@@ -10,6 +10,8 @@ const AuthContext = createContext({
   isAuthenticated: false,
   isLoading: true,
   isAdmin: () => false,
+  isSuperAdmin: () => false,
+  isAdminOrSuperAdmin: () => false,
   login: () => {},
   logout: () => {},
   register: () => {},
@@ -59,6 +61,16 @@ export const AuthProvider = ({ children }) => {
   // Check if user is admin
   const isAdmin = () => {
     return user && user.role === 'admin';
+  };
+
+  // Check if user is superadmin
+  const isSuperAdmin = () => {
+    return user && user.role === 'superadmin';
+  };
+
+  // Check if user has admin privileges (either admin or superadmin)
+  const isAdminOrSuperAdmin = () => {
+    return user && (user.role === 'admin' || user.role === 'superadmin');
   };
 
   // Load user from localStorage on initial load
@@ -120,8 +132,8 @@ export const AuthProvider = ({ children }) => {
       // Fetch full profile data
       await fetchProfile();
 
-      // Redirect to admin dashboard if user is admin, otherwise to profile
-      if (data.user.role === 'admin') {
+      // Redirect to admin dashboard if user is admin or superadmin, otherwise to profile
+      if (data.user.role === 'admin' || data.user.role === 'superadmin') {
         navigate('/admin/dashboard');
       } else {
         navigate('/profile');
@@ -279,9 +291,11 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         token,
-        isAuthenticated: !!token,
+        isAuthenticated: !!user,
         isLoading,
         isAdmin,
+        isSuperAdmin,
+        isAdminOrSuperAdmin,
         login,
         logout,
         register,
