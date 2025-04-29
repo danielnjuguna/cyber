@@ -66,8 +66,9 @@ app.use(cors({
   origin: [
     'http://localhost:8080', 
     'http://localhost:5000',
-    'https://cyberdocs-app.onrender.com',  // Added the frontend Render URL
-    'https://cyberdocs.onrender.com',       // And any other domains you might use
+    'https://cyberdocs-app.onrender.com',  // Placeholder, might remove later
+    'https://cyber-1-lywa.onrender.com',   // <<< Added your actual deployed frontend URL
+    'https://cyberdocs.onrender.com',       // Placeholder? Keep if needed
     // Add any other production domains here if needed
   ],
   credentials: true,
