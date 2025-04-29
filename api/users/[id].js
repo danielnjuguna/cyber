@@ -43,14 +43,14 @@ async function checkAdminAuth(req, res) {
 
 // --- Main Handler ---
 export default async function handler(req, res) {
-  // --- Check Admin Auth ---
+  // --- Check Admin Auth (Ensures requester is at least admin) ---
   const authenticatedUser = await checkAdminAuth(req, res);
   if (!authenticatedUser) {
-    return; // Response already sent by checkAdminAuth
+    return; // Response already sent
   }
 
-  // --- Get user ID from query parameter ---
-  const { id: userId } = req.params; // NEW: Uses req.params for Express route parameters
+  // --- Get target user ID ---
+  const { id: userId } = req.params; 
   console.log(`Request received for user ID: ${userId}, Method: ${req.method}`);
 
   if (!userId || isNaN(parseInt(userId))) {
@@ -80,9 +80,24 @@ export default async function handler(req, res) {
     }
 
   } else if (req.method === 'PUT') {
-    // --- Handle PUT: Update user (Admin) ---
+    // --- Handle PUT: Update user (Admin/Superadmin) ---
     const { email, phone, password, role } = req.body;
-    console.log(`PUT /api/users/${targetUserId} request (admin)`, { email, phone, role, password: password ? '******' : undefined });
+    console.log(`PUT /api/users/${targetUserId} request`, { requestedRole: role, adminId: authenticatedUser.id });
+
+    // *** Superadmin Check for ROLE CHANGE to admin/superadmin ***
+    if (role && (role === 'admin' || role === 'superadmin') && authenticatedUser.role !== 'superadmin') {
+      console.log(`   ❌ Permission Denied: Admin ID ${authenticatedUser.id} (Role: ${authenticatedUser.role}) attempted to set role '${role}' for user ${targetUserId}. Superadmin required.`);
+      return res.status(403).json({ message: 'Only superadmins can assign or change roles to admin or superadmin.' });
+    }
+    // *** End Superadmin Check ***
+
+    // Validate role if provided
+    if (role) {
+        const allowedRoles = ['user', 'staff', 'admin', 'superadmin'];
+        if (!allowedRoles.includes(role)) {
+            return res.status(400).json({ message: `Invalid role specified. Allowed roles: ${allowedRoles.join(', ')}` });
+        }
+    }
 
     try {
       // Check if user exists (though technically redundant if GET worked, good practice)
@@ -167,14 +182,25 @@ export default async function handler(req, res) {
     }
 
   } else if (req.method === 'DELETE') {
-    // --- Handle DELETE: Delete user (Admin) ---
-    console.log(`DELETE /api/users/${targetUserId} request (admin)`);
+    // --- Handle DELETE: Delete user (Admin/Superadmin) ---
+    console.log(`DELETE /api/users/${targetUserId} request by admin ${authenticatedUser.id}`);
     try {
-       // Check if user exists before deleting
-       const [existingUsers] = await pool.execute('SELECT id FROM users WHERE id = ?', [targetUserId]);
-       if (!existingUsers || existingUsers.length === 0) {
-           return res.status(404).json({ message: 'User not found' });
+       // Check if target user exists and get their role
+       const [targetUsers] = await pool.execute('SELECT id, role FROM users WHERE id = ?', [targetUserId]);
+       if (!targetUsers || targetUsers.length === 0) {
+           return res.status(404).json({ message: 'User to be deleted not found' });
        }
+       const targetUserRole = targetUsers[0].role;
+
+       // *** Superadmin Check for DELETING admin/superadmin ***
+       if ((targetUserRole === 'admin' || targetUserRole === 'superadmin') && authenticatedUser.role !== 'superadmin') {
+           console.log(`   ❌ Permission Denied: Admin ID ${authenticatedUser.id} (Role: ${authenticatedUser.role}) attempted to delete user ${targetUserId} (Role: ${targetUserRole}). Superadmin required.`);
+           return res.status(403).json({ message: 'Only superadmins can delete admin or superadmin users.' });
+       }
+       // *** End Superadmin Check ***
+       
+       // Allow admin/superadmin to delete 'user' or 'staff' roles
+       console.log(`   ✅ Permission granted: Admin ${authenticatedUser.id} deleting user ${targetUserId} (Role: ${targetUserRole})`);
 
       // Delete user
       const [deleteResult] = await pool.execute('DELETE FROM users WHERE id = ?', [targetUserId]);

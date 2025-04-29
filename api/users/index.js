@@ -64,11 +64,9 @@ export default async function handler(req, res) {
   // --- Check Admin Auth ---
   const authenticatedUser = await checkAdminAuth(req, res);
   if (!authenticatedUser) {
-    // If auth failed, checkAdminAuth already sent the response
-    return;
+    return; // Response already sent
   }
-  // User is authenticated as admin, proceed...
-
+  // User is authenticated as at least admin, proceed...
 
   // --- Route based on HTTP method ---
   if (req.method === 'GET') {
@@ -86,9 +84,23 @@ export default async function handler(req, res) {
     }
 
   } else if (req.method === 'POST') {
-    // --- Handle POST: Create new user (Admin) ---
-    const { email, phone, password, role } = req.body;
-    console.log('POST /api/users request (admin)', { email, role });
+    // --- Handle POST: Create new user (Admin/Superadmin) ---
+    const { email, phone, password, role = 'user' } = req.body; // Default role to 'user'
+    console.log('POST /api/users request', { requestedRole: role, adminId: authenticatedUser.id });
+
+    // *** Superadmin Check for assigning elevated roles ***
+    if ((role === 'admin' || role === 'superadmin') && authenticatedUser.role !== 'superadmin') {
+      console.log(`   ❌ Permission Denied: Admin ID ${authenticatedUser.id} (Role: ${authenticatedUser.role}) attempted to create user with role '${role}'. Superadmin required.`);
+      return res.status(403).json({ message: 'Only superadmins can assign admin or superadmin roles.' });
+    }
+    // *** End Superadmin Check ***
+    
+    // Allow admin/superadmin to create 'user' or 'staff' roles (or default)
+    // Validate role if needed (e.g., ensure it's one of ['user', 'staff', 'admin', 'superadmin'])
+    const allowedRoles = ['user', 'staff', 'admin', 'superadmin'];
+    if (!allowedRoles.includes(role)) {
+        return res.status(400).json({ message: `Invalid role specified. Allowed roles: ${allowedRoles.join(', ')}` });
+    }
 
     try {
       // Validate input
@@ -110,10 +122,10 @@ export default async function handler(req, res) {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Create user with specified role (default to 'user' if not provided)
+      // Create user with the validated role
       const [result] = await pool.execute(
         'INSERT INTO users (email, phone, password, role) VALUES (?, ?, ?, ?)',
-        [email, phone || null, hashedPassword, role || 'user']
+        [email, phone || null, hashedPassword, role] // Use the validated role
       );
 
       const userId = result.insertId;
