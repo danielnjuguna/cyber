@@ -167,16 +167,7 @@ app.get('/api/upload-token', (req, res) => {
   }
 });
 
-// Temporarily disable UploadThing integration since it's not installed in production
-app.use('/api/uploadthing', (req, res) => {
-  res.status(503).json({
-        error: true, 
-    message: 'UploadThing service is currently unavailable'
-  });
-});
-
 // --- Import Route Handlers ---
-// Helper function to import routes
 const importRoute = async (relativePathSpecifier) => {
   try {
     const modulePath = path.resolve(__dirname, 'api', relativePathSpecifier);
@@ -212,53 +203,72 @@ const setupRoutes = async () => {
     app.post('/api/users/reset-password', resetPasswordHandler);
     console.log('    ✓ POST /api/users/reset-password');
 
-    // --- PROTECTED USER ROUTES (Specific Auth Middleware might be needed inside handlers) ---
-    console.log('  Setting up PROTECTED user routes...');
-    // Example: Profile might check auth internally or use a specific middleware if needed
     const profileHandler = await importRoute('users/profile.js');
-    app.get('/api/users/profile', profileHandler); // Apply auth check within profileHandler if needed
+    app.get('/api/users/profile', profileHandler); 
     console.log('    ✓ GET /api/users/profile');
 
-    // --- ADMIN-ONLY /api/users ROUTES (Uses checkAdminAuth from users/index.js) ---
-    console.log('  Setting up ADMIN-ONLY /api/users routes...');
-    const adminUsersHandler = await importRoute('users/index.js');
-    // Apply this handler only for routes NOT handled above that start with /api/users
-    // This typically means GET /api/users, POST /api/users (create user), GET /api/users/:id, PUT/DELETE /api/users/:id etc.
-    // Ensure this doesn't accidentally override the public routes defined above.
-    // Express matches routes in order. A more specific router might be better.
-    app.use('/api/users', adminUsersHandler); // This will apply checkAdminAuth defined within it
-    console.log('    ✓ Applied admin handler to remaining /api/users/*');
+    // --- RESOURCE ROUTES (Collections & Specific Items) ---
+    console.log('  Setting up RESOURCE routes...');
 
+    // Users (Admin & Specific ID)
+    const adminUsersHandler = await importRoute('users/index.js'); // Handles GET /api/users, POST /api/users
+    const userIdHandler = await importRoute('users/[id].js');     // Handles GET /api/users/:id, PUT ..., DELETE ...
+    app.get('/api/users', adminUsersHandler);
+    app.post('/api/users', adminUsersHandler);
+    app.get('/api/users/:id', userIdHandler);
+    app.put('/api/users/:id', userIdHandler);
+    app.delete('/api/users/:id', userIdHandler);
+    console.log('    ✓ /api/users routes configured');
 
-    // --- OTHER RESOURCE ROUTES (Apply specific auth middleware as needed) ---
-    console.log('  Setting up other resource routes...');
-    const documentsRoute = await importRoute('documents/index.js'); // Assumes documents/index.js handles its own auth checks if needed
-    app.use('/api/documents', documentsRoute);
-    console.log('    ✓ /api/documents/*');
+    // Documents (Collection & Specific ID)
+    const documentsHandler = await importRoute('documents/index.js'); // Handles GET /api/documents, POST /api/documents
+    const documentIdHandler = await importRoute('documents/[id].js'); // Handles GET /api/documents/:id, PUT ..., DELETE ...
+    const documentDownloadHandler = await importRoute('documents/[id]/download.js'); // Handles GET /api/documents/:id/download
+    app.get('/api/documents', documentsHandler);
+    app.post('/api/documents', documentsHandler);
+    app.get('/api/documents/:id', documentIdHandler);
+    app.put('/api/documents/:id', documentIdHandler);
+    app.delete('/api/documents/:id', documentIdHandler);
+    app.get('/api/documents/:id/download', documentDownloadHandler);
+    console.log('    ✓ /api/documents routes configured');
 
-    const servicesRoute = await importRoute('services/index.js'); // Assumes services/index.js handles its own auth checks if needed
-    app.use('/api/services', servicesRoute);
-    console.log('    ✓ /api/services/*');
+    // Services (Collection & Specific ID)
+    const servicesHandler = await importRoute('services/index.js'); // Handles GET /api/services, POST /api/services
+    const serviceIdHandler = await importRoute('services/[id].js');  // Handles GET /api/services/:id, PUT ..., DELETE ...
+    app.get('/api/services', servicesHandler);
+    app.post('/api/services', servicesHandler);
+    app.get('/api/services/:id', serviceIdHandler);
+    app.put('/api/services/:id', serviceIdHandler);
+    app.delete('/api/services/:id', serviceIdHandler);
+    console.log('    ✓ /api/services routes configured');
 
-    const contactRoute = await importRoute('contact/index.js'); // Likely public
-    app.use('/api/contact', contactRoute);
-    console.log('    ✓ /api/contact');
+    // Contact (Likely just POST)
+    const contactHandler = await importRoute('contact/index.js');
+    app.post('/api/contact', contactHandler);
+    console.log('    ✓ POST /api/contact');
 
-    // Files route (Auth check likely needed within handler)
-    const filesRouteHandler = await importRoute('files/index.js');
-    app.use('/api/files', filesRouteHandler);
-    console.log('    ✓ /api/files/*');
+    // Files (DELETE only with key? Check files/index.js)
+    const filesHandler = await importRoute('files/index.js');
+    // Assuming files/index.js handles DELETE /api/files/:key
+    app.use('/api/files', filesHandler);
+    console.log('    ✓ /api/files routes configured (check handler for methods)');
 
-    // UploadThing route (Uses UploadThing's own auth mechanisms)
+    // --- UploadThing Route ---
+    console.log('  Setting up UploadThing routes...');
     if (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID) {
       try {
-        const uploadThingRoute = await importRoute('uploadthing.js');
-        app.use('/api/uploadthing', uploadThingRoute);
-        console.log('    ✓ /api/uploadthing');
+        // Import the handler logic from api/uploadthing.js
+        const uploadThingRoute = await importRoute('uploadthing.js'); 
+        app.use('/api/uploadthing', uploadThingRoute); // Use the imported handler
+        console.log('    ✓ /api/uploadthing configured using api/uploadthing.js');
       } catch (utError) {
-         console.error('    ❌ Error loading UploadThing routes:', utError);
-         app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable' }));
+         console.error('    ❌ Error loading UploadThing handler from api/uploadthing.js:', utError);
+         // Add fallback if import fails
+         app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable due to handler load error' }));
       }
+    } else {
+      console.warn('    ⚠️ UploadThing secrets not found, /api/uploadthing route disabled.');
+      app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing not configured' }));
     }
 
     // Health check route (Public)
