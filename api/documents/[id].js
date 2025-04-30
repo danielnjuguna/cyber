@@ -19,24 +19,33 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 async function checkAdminAuth(req, res) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) { 
-      res.status(401).json({ message: 'Authentication required' }); 
-      return null; 
+    if (!token) {
+      res.status(401).json({ message: 'Authentication required' });
+      return null;
     }
     const decoded = jwt.verify(token, JWT_SECRET);
     const [users] = await pool.execute('SELECT id, role FROM users WHERE id = ?', [decoded.id]);
-    if (!users || users.length === 0) { 
-      res.status(401).json({ message: 'User not found' }); 
-      return null; 
-    }
-    if (users[0].role !== 'admin') { 
-      res.status(403).json({ message: 'Admin access required' }); 
+    if (!users || users.length === 0) {
+      res.status(401).json({ message: 'User not found' });
       return null;
     }
-    return decoded;
-  } catch (error) { 
-    res.status(401).json({ message: 'Authentication failed' }); 
-    return null; 
+    // Accept both admin and superadmin roles
+    if (users[0].role !== 'admin' && users[0].role !== 'superadmin') {
+      res.status(403).json({ message: 'Admin or Superadmin access required' });
+      return null;
+    }
+    // Return the decoded token AND the user's role
+    return { ...decoded, role: users[0].role }; 
+  } catch (error) {
+    console.error('Admin Auth Check Error:', error.message || error); // Log the actual error
+    if (error.name === 'JsonWebTokenError') {
+      res.status(401).json({ message: 'Invalid token' });
+    } else if (error.name === 'TokenExpiredError') {
+      res.status(401).json({ message: 'Token expired' });
+    } else {
+      res.status(401).json({ message: 'Authentication failed' });
+    }
+    return null;
   }
 }
 
