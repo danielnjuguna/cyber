@@ -64,7 +64,7 @@ export default async function handler(req, res) {
       console.log(`GET /api/documents/${targetDocumentId} request`);
       // Select URL/Key columns
       const [documents] = await pool.execute(
-        'SELECT id, title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?', 
+        'SELECT id, title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key, file_type, created_at, updated_at FROM documents WHERE id = ?', 
         [targetDocumentId]
       );
       if (!documents || documents.length === 0) {
