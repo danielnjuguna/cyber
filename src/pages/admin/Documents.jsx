@@ -436,20 +436,20 @@ const AdminDocuments = () => {
                     endpoint="documentUploader"
                     buttonText="Upload Document"
                     onClientUploadComplete={(res) => {
-                      if (res && res.length > 0) {
+                      if (res && res.length > 0 && res[0].serverData) {
                         console.log("📄 Document Upload Completed:", res);
                         setFormData(prev => ({
                           ...prev,
                           documentUrl: res[0].url,
                           documentKey: res[0].key,
-                          documentType: res[0].type
+                          documentType: res[0].serverData.type
                         }));
                         setDocumentUploadStatus('complete');
                         toast({ title: 'Success', description: 'Document uploaded.' });
                       } else {
                          console.error("Document upload failed or response format incorrect:", res);
                          setDocumentUploadStatus('error');
-                         toast({ title: 'Upload Error', description: 'Document upload failed.', variant: 'destructive'});
+                         toast({ title: 'Upload Error', description: 'Document upload response missing expected data.', variant: 'destructive'});
                       }
                     }}
                     onUploadError={(error) => {
