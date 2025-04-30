@@ -7,26 +7,28 @@ import DocViewer, { DocViewerRenderers } from "react-doc-viewer"; // Import reac
  * A component that renders various document types using react-doc-viewer
  * with a blurred preview effect on a portion of the first page only.
  */
-const DocumentViewer = ({ documentUrl, documentTitle, className }) => {
+const DocumentViewer = ({ documentUrl, documentTitle, fileType, className }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Assume PDF for now - a better solution would pass the type or filename
-  const assumedFileType = 'pdf'; 
-  const formatName = 'PDF'; // Hardcode format name based on assumption
+  
+  // Determine format name based on passed fileType
+  const formatName = fileType ? fileType.toUpperCase() : 'File'; 
 
   useEffect(() => {
     if (!documentUrl) {
       setError('No document URL provided');
       setLoading(false);
+    } else if (!fileType) {
+      setError('File type not provided');
+      setLoading(false);
     } else {
-      // Reset state when URL changes
-      setLoading(false); // Set loading false since we aren't detecting type anymore
+      setLoading(false); // We have URL and type, ready to attempt render
       setError(null);
     }
-  }, [documentUrl]);
+  }, [documentUrl, fileType]);
 
-  // Prepare docs array for DocViewer
-  const documents = documentUrl ? [{ uri: documentUrl, fileType: assumedFileType }] : [];
+  // Prepare docs array for DocViewer using the passed fileType
+  const documents = (documentUrl && fileType) ? [{ uri: documentUrl, fileType: fileType }] : [];
 
   const CustomErrorComponent = ({ messageOverride }) => {
     return (
@@ -40,17 +42,26 @@ const DocumentViewer = ({ documentUrl, documentTitle, className }) => {
   };
 
   // Handle loading state explicitly before rendering DocViewer
-  if (!documentUrl) {
-     return (
-      <div className={cn("flex flex-col items-center justify-center p-8 text-center h-[600px]", className)}>
-        <AlertCircle className="h-10 w-10 text-destructive mb-4" />
-        <h3 className="text-lg font-medium mb-2">Error Loading Preview</h3>
-        <p className="text-muted-foreground">No document URL was provided.</p>
+  if (loading) {
+    return (
+      <div className={cn("flex flex-col items-center justify-center p-8 h-[600px]", className)}>
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-muted-foreground">Loading document preview...</p>
       </div>
     );
   }
   
-  // Error state is handled by the noRenderer override or if initial URL check fails
+  if (error || !fileType || !documentUrl) {
+     return (
+      <div className={cn("flex flex-col items-center justify-center p-8 text-center h-[600px]", className)}>
+        <AlertCircle className="h-10 w-10 text-destructive mb-4" />
+        <h3 className="text-lg font-medium mb-2">Error Loading Preview</h3>
+        <p className="text-muted-foreground">{error || 'Document URL or File Type missing.'}</p>
+      </div>
+    );
+  }
+  
+  // Error during rendering is handled by the noRenderer override
 
   return (
     <div className={cn("rounded-md overflow-hidden border", className)}>

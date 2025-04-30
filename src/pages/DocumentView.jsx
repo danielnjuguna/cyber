@@ -31,24 +31,27 @@ const DocumentView = () => {
         setError(null);
         
         const response = await api.getDocument(id);
+        console.log("Fetched document data:", response); // Log fetched data
         
         if (response && response.document) {
-          // Transform API response to match component expectations
+          // Transform API response to match component expectations, include file_type
           const transformedDocument = {
             id: response.document.id,
             title: response.document.title,
             description: response.document.description,
-            longDescription: response.document.description, // Use description as long description if needed
+            longDescription: response.document.description,
             category: response.document.category || 'uncategorized',
+            fileType: response.document.file_type || null, // <<< Get file_type
             thumbnailUrl: response.document.thumbnail_url
               ? getFileUrl(response.document.thumbnail_url)
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
-            previewUrl: response.document.document_path
-              ? getFileUrl(response.document.document_path)
+            previewUrl: response.document.document_url // <<< Use document_url now
+              ? getFileUrl(response.document.document_url)
               : null,
-            sampleContent: response.document.preview_text || "This is a preview of the document. For full access, please contact us."
+            // sampleContent: response.document.preview_text || "This is a preview of the document. For full access, please contact us." // Remove if not used
           };
           
+          console.log("Transformed document data:", transformedDocument); // Log transformed data
           setDocument(transformedDocument);
         } else {
           setError('Document not found');
@@ -201,7 +204,7 @@ const DocumentView = () => {
               </div>
               
               <div className="lg:col-span-2">
-                <h1 className="text-3xl font-bold">{document.title}</h1>
+                <h1 className="text-3xl font-bold mb-4">{document.title}</h1>
                 <div className="mt-2">
                   <span className="inline-block px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full">
                     {document.category.charAt(0).toUpperCase() + document.category.slice(1)}
@@ -226,9 +229,10 @@ const DocumentView = () => {
                     </div>
                     
                     {document.previewUrl ? (
-                      <DocumentViewer 
+                      <DocumentViewer
                         documentUrl={document.previewUrl}
                         documentTitle={document.title}
+                        fileType={document.fileType} // <<< Pass fileType prop
                         className="mt-4"
                       />
                     ) : (
@@ -256,6 +260,13 @@ const DocumentView = () => {
                           <span className="text-muted-foreground">Access Level:</span>
                           <span className="font-medium">Limited Preview</span>
                         </div>
+                        {/* Display File Type if available */}
+                        {document.fileType && (
+                           <div className="flex items-center gap-2">
+                             <span className="text-muted-foreground">File Type:</span>
+                             <span className="font-medium">{document.fileType.toUpperCase()}</span>
+                           </div>
+                        )}
                       </div>
                     </div>
                   </div>

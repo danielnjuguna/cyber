@@ -90,7 +90,8 @@ const AdminDocuments = () => {
     documentUrl: '',
     documentKey: '',
     thumbnailUrl: '',
-    thumbnailKey: ''
+    thumbnailKey: '',
+    documentType: ''
   });
   const [isEditing, setIsEditing] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -192,7 +193,8 @@ const AdminDocuments = () => {
       documentUrl: '',
       documentKey: '',
       thumbnailUrl: '',
-      thumbnailKey: ''
+      thumbnailKey: '',
+      documentType: ''
     });
     setIsEditing(false);
     setDocumentUploadStatus('idle');
@@ -217,7 +219,8 @@ const AdminDocuments = () => {
       documentUrl: document.document_url || '',
       documentKey: document.document_key || '',
       thumbnailUrl: document.thumbnail_url || '',
-      thumbnailKey: document.thumbnail_key || ''
+      thumbnailKey: document.thumbnail_key || '',
+      documentType: document.file_type || ''
     });
     setIsEditing(true);
     setIsDialogOpen(true);
@@ -234,10 +237,10 @@ const AdminDocuments = () => {
       addCustomCategory();
     }
     
-    if (!isEditing && (!formData.documentUrl || !formData.thumbnailUrl)) {
+    if (!isEditing && (!formData.documentUrl || !formData.thumbnailUrl || !formData.documentType)) {
        toast({
-         title: 'Missing Files',
-         description: 'Please upload both a document and a thumbnail.',
+         title: 'Missing Files or Type',
+         description: 'Please upload both a document and a thumbnail, and ensure file type was captured.',
          variant: 'destructive',
        });
        setIsSubmitting(false);
@@ -261,6 +264,7 @@ const AdminDocuments = () => {
         category: formData.category,
         documentUrl: formData.documentUrl,
         documentKey: formData.documentKey,
+        documentType: formData.documentType,
         thumbnailUrl: formData.thumbnailUrl,
         thumbnailKey: formData.thumbnailKey,
       };
@@ -269,7 +273,9 @@ const AdminDocuments = () => {
 
       let response;
       if (isEditing) {
-        response = await api.updateDocument(formData.id, payload);
+        const updatePayload = { ...payload };
+        delete updatePayload.documentType;
+        response = await api.updateDocument(formData.id, updatePayload);
         setDocuments(prev => prev.map(doc =>
           doc.id === formData.id ? { ...doc, ...payload, updated_at: new Date().toISOString() } : doc
         ));
@@ -280,6 +286,7 @@ const AdminDocuments = () => {
            ...response.document,
            documentUrl: response.document?.document_url || payload.documentUrl,
            thumbnailUrl: response.document?.thumbnail_url || payload.thumbnailUrl,
+           file_type: response.document?.file_type || payload.documentType
          };
         setDocuments(prev => [newDocument, ...prev]);
         toast({ title: 'Success', description: 'Document added successfully!' });
@@ -426,6 +433,7 @@ const AdminDocuments = () => {
                           ...prev,
                           documentUrl: res[0].url,
                           documentKey: res[0].key,
+                          documentType: res[0].type
                         }));
                         setDocumentUploadStatus('complete');
                         toast({ title: 'Success', description: 'Document uploaded.' });

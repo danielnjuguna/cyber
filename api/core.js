@@ -167,9 +167,16 @@ export const ourFileRouter = {
       pdf: { maxFileSize: "30MB", maxFileCount: 1 },
       image: { maxFileSize: "10MB", maxFileCount: 1 },
       text: { maxFileSize: "10MB", maxFileCount: 1 },
-      audio: { maxFileSize: "30MB", maxFileCount: 1 },
-      video: { maxFileSize: "30MB", maxFileCount: 1 },
-      blob: { maxFileSize: "30MB", maxFileCount: 1 },
+      // Allow common document formats
+      "application/msword": { maxFileSize: "30MB", maxFileCount: 1 }, // .doc
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "30MB", maxFileCount: 1 }, // .docx
+      "application/vnd.ms-excel": { maxFileSize: "30MB", maxFileCount: 1 }, // .xls
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { maxFileSize: "30MB", maxFileCount: 1 }, // .xlsx
+      "application/vnd.ms-powerpoint": { maxFileSize: "30MB", maxFileCount: 1 }, // .ppt
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": { maxFileSize: "30MB", maxFileCount: 1 }, // .pptx
+      "text/csv": { maxFileSize: "10MB", maxFileCount: 1 }, // .csv
+      // Generic blob as fallback, adjust size if needed
+      blob: { maxFileSize: "30MB", maxFileCount: 1 }, 
     })
     .middleware(async ({ req, res }) => {
       console.log("⬆️ Document upload started, processing middleware...");
@@ -190,19 +197,26 @@ export const ourFileRouter = {
         console.log("🎉 Document Upload complete for userId:", metadata.userId);
         console.log("📄 File URL:", file.url);
         console.log("🔑 File key:", file.key);
+        console.log("📛 File name:", file.name);
+        console.log("📐 File size:", file.size);
+
+        // Determine file type from the original filename extension
+        const fileName = file.name || '';
+        const fileType = fileName.split('.').pop()?.toLowerCase() || 'blob'; // Default to blob if no extension
+        console.log("📄 Determined File Type:", fileType);
         
-        // Here you might want to save the file info to your database
-        
+        // Return file type in metadata
         return { 
           uploadedBy: metadata.userId, 
           url: file.url, 
           key: file.key,
           name: file.name,
-          size: file.size
+          size: file.size,
+          type: fileType // Add the determined file type
         };
       } catch (error) {
         console.error("⚠️ Error in onUploadComplete:", error);
-        throw new UploadThingError("Failed to process upload");
+        throw new UploadThingError("Failed to process document upload");
       }
     }),
 };

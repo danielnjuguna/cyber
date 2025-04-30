@@ -91,6 +91,7 @@ export default async function handler(req, res) {
         category, 
         documentUrl, 
         documentKey, 
+        documentType,
         thumbnailUrl, 
         thumbnailKey 
       } = req.body;
@@ -101,22 +102,22 @@ export default async function handler(req, res) {
       if (!title || !description) {
         return res.status(400).json({ message: 'Title and description are required.' });
       }
-      if (!documentUrl || !documentKey) {
-         return res.status(400).json({ message: 'Document URL and Key are required.' });
+      if (!documentUrl || !documentKey || !documentType) {
+         return res.status(400).json({ message: 'Document URL, Key, and Type are required.' });
       }
       // Thumbnail is optional, but if URL is present, Key should be too (usually)
        if (thumbnailUrl && !thumbnailKey) {
          console.warn('Thumbnail URL provided but Key is missing. Proceeding, but this might indicate an issue.');
        }
 
-      // Save document details to the database with URLs and Keys
-      // Added document_path to match database schema requirements
+      // Save document details to the database including file_type
       const [result] = await pool.execute(
-        'INSERT INTO documents (title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO documents (title, description, category, file_type, document_url, document_key, document_path, thumbnail_url, thumbnail_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             title,
             description,
             category || 'other', // Default category
+            documentType,
             documentUrl,
             documentKey,
             documentUrl, // Set document_path to same value as documentUrl
@@ -128,10 +129,9 @@ export default async function handler(req, res) {
       const newDocumentId = result.insertId;
       console.log(`Document created with ID: ${newDocumentId}`);
 
-      // Fetch the created document to return it
+      // Fetch the created document to return it, including file_type
       const [newDocumentData] = await pool.execute(
-        // Include document_path in the selection
-        'SELECT id, title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
+        'SELECT id, title, description, category, file_type, document_url, document_key, document_path, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
         [newDocumentId]
       );
 
