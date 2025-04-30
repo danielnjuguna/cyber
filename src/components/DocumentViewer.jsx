@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, AlertCircle, Lock, FileSpreadsheet, File, Image } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { FileText, AlertCircle, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer"; // Import react-doc-viewer
 
@@ -11,73 +10,28 @@ import DocViewer, { DocViewerRenderers } from "react-doc-viewer"; // Import reac
 const DocumentViewer = ({ documentUrl, documentTitle, className }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [fileType, setFileType] = useState(null);
-  const [formatIcon, setFormatIcon] = useState(() => FileText);
-  const [formatName, setFormatName] = useState('document');
+  // Assume PDF for now - a better solution would pass the type or filename
+  const assumedFileType = 'pdf'; 
+  const formatName = 'PDF'; // Hardcode format name based on assumption
 
   useEffect(() => {
     if (!documentUrl) {
       setError('No document URL provided');
       setLoading(false);
-      return;
+    } else {
+      // Reset state when URL changes
+      setLoading(false); // Set loading false since we aren't detecting type anymore
+      setError(null);
     }
-
-    // Determine file type from URL
-    const determineFileType = () => {
-      try {
-        setLoading(true);
-        setError(null); // Reset error on new load
-
-        // Extract filename and extension from URL
-        const urlParts = documentUrl.split('/');
-        const fullFileName = urlParts[urlParts.length - 1];
-        const fileNameWithoutQuery = fullFileName.split('?')[0];
-        const extension = fileNameWithoutQuery.split('.').pop()?.toLowerCase(); // Use optional chaining
-
-        if (!extension) {
-          throw new Error('Could not determine file extension from URL.');
-        }
-        
-        setFileType(extension);
-        setFormatName(extension.toUpperCase());
-
-        // Set icon based on extension
-        switch (extension) {
-          case 'pdf': setFormatIcon(() => FileText); break;
-          case 'docx':
-          case 'doc': setFormatIcon(() => FileText); break;
-          case 'xlsx':
-          case 'xls': setFormatIcon(() => FileSpreadsheet); break;
-          case 'pptx':
-          case 'ppt': setFormatIcon(() => FileText); break;
-          case 'txt':
-          case 'rtf': setFormatIcon(() => FileText); break;
-          case 'jpg':
-          case 'jpeg':
-          case 'png':
-          case 'gif': setFormatIcon(() => Image); break;
-          case 'csv': setFormatIcon(() => FileSpreadsheet); break;
-          default: setFormatIcon(() => File); setFormatName('File'); break;
-        }
-
-        setLoading(false);
-      } catch (err) {
-        console.error('Error determining file type:', err);
-        setError('Failed to determine document type from URL.');
-        setLoading(false);
-      }
-    };
-
-    determineFileType();
   }, [documentUrl]);
 
-  const documents = [{ uri: documentUrl, fileType: fileType }];
+  // Prepare docs array for DocViewer
+  const documents = documentUrl ? [{ uri: documentUrl, fileType: assumedFileType }] : [];
 
   const CustomErrorComponent = ({ messageOverride }) => {
-    const IconComponent = formatIcon;
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center h-[600px]">
-        <IconComponent className="h-10 w-10 text-muted-foreground mb-4" />
+        <FileText className="h-10 w-10 text-muted-foreground mb-4" />
         <h3 className="text-lg font-medium mb-2">{documentTitle || formatName} Preview Unavailable</h3>
         <p className="text-muted-foreground">{messageOverride || "There was a problem displaying this document or the format is unsupported."}</p>
         <p className="text-sm text-muted-foreground mt-4">Please contact us for the full document.</p>
@@ -85,46 +39,45 @@ const DocumentViewer = ({ documentUrl, documentTitle, className }) => {
     );
   };
 
-  if (loading) {
-    return (
-      <div className={cn("flex flex-col items-center justify-center p-8 h-[600px]", className)}>
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-muted-foreground">Loading document preview...</p>
-      </div>
-    );
-  }
-
-  if (error || !fileType) {
-    return (
+  // Handle loading state explicitly before rendering DocViewer
+  if (!documentUrl) {
+     return (
       <div className={cn("flex flex-col items-center justify-center p-8 text-center h-[600px]", className)}>
         <AlertCircle className="h-10 w-10 text-destructive mb-4" />
-        <h3 className="text-lg font-medium mb-2">Error Loading {documentTitle || 'Document'}</h3>
-        <p className="text-muted-foreground">{error || 'Could not determine file type.'}</p>
-        <p className="text-sm text-muted-foreground mt-4">Please contact support to access this document.</p>
+        <h3 className="text-lg font-medium mb-2">Error Loading Preview</h3>
+        <p className="text-muted-foreground">No document URL was provided.</p>
       </div>
     );
   }
+  
+  // Error state is handled by the noRenderer override or if initial URL check fails
 
   return (
     <div className={cn("rounded-md overflow-hidden border", className)}>
       <div className="relative h-[600px] overflow-hidden">
         <DocViewer
           documents={documents}
-          pluginRenderers={DocViewerRenderers}
+          pluginRenderers={DocViewerRenderers} // Use default renderers
           config={{
             header: {
               disableHeader: true, // Hide the default header
               disableFileName: true,
             },
-            pdfZoom: { // Optional: set initial zoom level
-              defaultZoom: 1.0, // Adjust as needed
-              zoomJump: 0.2,
-            },
+             pdfZoom: { // Optional: set initial zoom level
+               defaultZoom: 0.8, // Try a slightly smaller zoom
+               zoomJump: 0.2,
+             },
+            pdfVerticalScrollByDefault: true, // Ensure vertical scroll behavior if needed internally
             noRenderer: { // Custom component when no renderer is available
-              overrideComponent: () => <CustomErrorComponent messageOverride="This file type cannot be previewed."/>
+              overrideComponent: () => <CustomErrorComponent messageOverride={`Preview for ${formatName} files is not currently supported.`}/>
             },
             loadingRenderer: { // Hide default loading message
-              overrideComponent: () => null // We handle loading outside
+              overrideComponent: () => (
+                 <div className="flex flex-col items-center justify-center p-8 h-full">
+                   <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                   <p className="text-muted-foreground">Loading document preview...</p>
+                 </div>
+              )
             }
           }}
           style={{ height: '100%' }}
