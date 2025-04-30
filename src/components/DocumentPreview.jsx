@@ -69,7 +69,7 @@ const DocumentPreview = ({ id, title, description, thumbnailUrl, previewUrl, cla
           src={getThumbnailUrl(thumbnailUrl)} 
           alt={title}
           className={cn(
-            "w-full h-full object-cover transition-transform duration-500",
+            "w-full h-full object-cover object-center transition-transform duration-500",
             isHovered ? "scale-105" : "scale-100",
             (imageError || !isLoaded) ? "opacity-0" : "opacity-100"
           )}
