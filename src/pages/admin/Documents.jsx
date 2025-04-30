@@ -236,12 +236,21 @@ const AdminDocuments = () => {
     if (showCustomCategoryInput && customCategory.trim()) {
       addCustomCategory();
     }
+
+    // Log the state right before validation
+    console.log('💾 Checking formData before validation:', formData);
     
+    // Ensure file type is captured in formData
     if (!isEditing && (!formData.documentUrl || !formData.thumbnailUrl || !formData.documentType)) {
        toast({
          title: 'Missing Files or Type',
          description: 'Please upload both a document and a thumbnail, and ensure file type was captured.',
          variant: 'destructive',
+       });
+       console.error('Validation Failed: Missing URL or Type.', { 
+           docUrl: formData.documentUrl, 
+           thumbUrl: formData.thumbnailUrl, 
+           docType: formData.documentType 
        });
        setIsSubmitting(false);
        return;
