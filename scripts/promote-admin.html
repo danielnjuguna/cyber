@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDocs - Promote User to Admin</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2563eb;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+        .warning {
+            background-color: #fee2e2;
+            border-left: 4px solid #ef4444;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dcfce7;
+            border-left: 4px solid #22c55e;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+        button {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #1d4ed8;
+        }
+        button:disabled {
+            background-color: #93c5fd;
+            cursor: not-allowed;
+        }
+        pre {
+            background-color: #f8fafc;
+            border: 1px solid #e5e7eb;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            width: 100%;
+            font-size: 1rem;
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        #error-message {
+            color: #ef4444;
+            background-color: #fee2e2;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        .user-info {
+            background-color: #f0f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #bae6fd;
+        }
+        .user-info h3 {
+            margin-top: 0;
+            color: #0369a1;
+        }
+        .user-info p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>CyberDocs - Promote User to Admin</h1>
+    
+    <div class="warning">
+        <strong>Warning:</strong> This is a temporary debugging tool. Do not expose this on production.
+        Remove this file and the corresponding API endpoint when done.
+    </div>
+
+    <div id="success-message" class="success">
+        <strong>Success!</strong> <span id="success-text"></span>
+    </div>
+
+    <form id="promote-form">
+        <div>
+            <label for="base-url">API Base URL:</label>
+            <input type="text" id="base-url" value="http://localhost:5000" required>
+        </div>
+        
+        <div>
+            <label for="admin-pass">Admin Password:</label>
+            <input type="password" id="admin-pass" value="debug_check_12345" required>
+        </div>
+        
+        <div>
+            <label for="user-email">Email of User to Promote:</label>
+            <input type="email" id="user-email" placeholder="Enter user email" value="danielnjuguna9042@gmail.com" required>
+        </div>
+        
+        <button type="submit" id="promote-button">Promote to Admin</button>
+    </form>
+
+    <div id="error-message"></div>
+
+    <div id="api-response" style="display: none;">
+        <h3>API Response</h3>
+        <pre id="response-data"></pre>
+    </div>
+
+    <div id="user-info" class="user-info" style="display: none;">
+        <h3>User Details</h3>
+        <p><strong>ID:</strong> <span id="user-id"></span></p>
+        <p><strong>Email:</strong> <span id="user-email-display"></span></p>
+        <p><strong>Role:</strong> <span id="user-role"></span></p>
+        <p><strong>Updated At:</strong> <span id="user-updated"></span></p>
+    </div>
+
+    <script>
+        document.getElementById('promote-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const baseUrl = document.getElementById('base-url').value.trim();
+            const adminPass = document.getElementById('admin-pass').value.trim();
+            const userEmail = document.getElementById('user-email').value.trim();
+            
+            const errorMsg = document.getElementById('error-message');
+            const successMsg = document.getElementById('success-message');
+            const apiResponse = document.getElementById('api-response');
+            const userInfo = document.getElementById('user-info');
+            
+            errorMsg.style.display = 'none';
+            successMsg.style.display = 'none';
+            apiResponse.style.display = 'none';
+            userInfo.style.display = 'none';
+            
+            // Disable button
+            const button = document.getElementById('promote-button');
+            button.disabled = true;
+            button.textContent = 'Processing...';
+            
+            try {
+                const url = `${baseUrl}/api/users/promote?adminPass=${encodeURIComponent(adminPass)}`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: userEmail })
+                });
+                
+                const data = await response.json();
+                
+                // Show API response
+                document.getElementById('response-data').textContent = JSON.stringify(data, null, 2);
+                apiResponse.style.display = 'block';
+                
+                if (!response.ok) {
+                    throw new Error(data.message || `Server responded with status: ${response.status}`);
+                }
+                
+                // Show success message
+                document.getElementById('success-text').textContent = data.message;
+                successMsg.style.display = 'block';
+                
+                // Show user info if available
+                if (data.user) {
+                    document.getElementById('user-id').textContent = data.user.id;
+                    document.getElementById('user-email-display').textContent = data.user.email;
+                    document.getElementById('user-role').textContent = data.user.role;
+                    document.getElementById('user-updated').textContent = new Date(data.user.updated_at).toLocaleString();
+                    userInfo.style.display = 'block';
+                }
+                
+            } catch (error) {
+                errorMsg.textContent = `Error: ${error.message}`;
+                errorMsg.style.display = 'block';
+                console.error('Error promoting user:', error);
+            } finally {
+                // Enable button
+                button.disabled = false;
+                button.textContent = 'Promote to Admin';
+            }
+        });
+    </script>
+</body>
+</html> 

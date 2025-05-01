@@ -56,7 +56,21 @@ const ServiceCard = ({
   // Ensure imageUrl has proper server path if it's a relative path from database
   const getImageUrl = (url) => {
     if (!url) return null;
-    return getFileUrl(url);
+    
+    // If path is already a full URL, return it
+    if (url.startsWith('http')) {
+      // Handle both UploadThing URL formats (utfs.io and ufs.sh domains)
+      if (url.includes('utfs.io') || url.includes('ufs.sh')) {
+        // Extract the file key from the URL
+        const fileKey = url.split('/').pop();
+        // Use the standard format for consistency
+        return `https://utfs.io/f/${fileKey}`;
+      }
+      return url;
+    }
+    
+    // For relative paths, use the fallback image
+    return fallbackImageUrl;
   };
   
   // Fallback image URL - using a more reliable placeholder service

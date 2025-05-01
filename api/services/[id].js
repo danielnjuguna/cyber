@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       console.log(`GET /api/services/${serviceId} request`);
       // Select URL/Key columns
       const [services] = await pool.execute(
-        'SELECT id, title, description, long_description, image_url, image_key, created_at, updated_at FROM services WHERE id = ?', 
+        'SELECT id, title, description, long_description, imageUrl, imageKey, created_at, updated_at FROM services WHERE id = ?', 
         [serviceId]
       );
       
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
       
       // 1. Get current service data (including old key)
       const [currentServices] = await pool.execute(
-        'SELECT image_key FROM services WHERE id = ?',
+        'SELECT imageKey FROM services WHERE id = ?',
         [serviceId]
       );
       
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
       }
       
       const oldService = currentServices[0];
-      console.log('Old image key:', oldService.image_key);
+      console.log('Old image key:', oldService.imageKey);
       
       // 2. Update database with new data
       const updateFields = [];
@@ -126,8 +126,8 @@ export default async function handler(req, res) {
       if (description) { updateFields.push('description = ?'); updateParams.push(description); }
       if (long_description !== undefined) { updateFields.push('long_description = ?'); updateParams.push(long_description || null); }
       // Only update URL/Key if a new one was provided
-      if (imageUrl !== undefined) { updateFields.push('image_url = ?'); updateParams.push(imageUrl || null); }
-      if (imageKey !== undefined) { updateFields.push('image_key = ?'); updateParams.push(imageKey || null); }
+      if (imageUrl !== undefined) { updateFields.push('imageUrl = ?'); updateParams.push(imageUrl || null); }
+      if (imageKey !== undefined) { updateFields.push('imageKey = ?'); updateParams.push(imageKey || null); }
 
       if (updateFields.length === 0) {
           return res.status(400).json({ message: 'No fields provided for update.' });
@@ -147,7 +147,7 @@ export default async function handler(req, res) {
       // 3. Delete old image from UploadThing if replaced
       // Normalize both keys before comparison to ensure proper matching
       const normalizeKey = (key) => key ? key.trim() : null;
-      const oldKey = normalizeKey(oldService.image_key);
+      const oldKey = normalizeKey(oldService.imageKey);
       const newKey = normalizeKey(imageKey);
       
       const keyToDelete = (newKey !== undefined && oldKey && oldKey !== newKey) 
@@ -173,7 +173,7 @@ export default async function handler(req, res) {
       
       // 4. Fetch updated service
       const [updatedServiceData] = await pool.execute(
-        'SELECT id, title, description, long_description, image_url, image_key, created_at, updated_at FROM services WHERE id = ?',
+        'SELECT id, title, description, long_description, imageUrl, imageKey, created_at, updated_at FROM services WHERE id = ?',
         [serviceId]
       );
       
@@ -198,7 +198,7 @@ export default async function handler(req, res) {
       
       // 1. Get service key before deletion
       const [services] = await pool.execute(
-        'SELECT image_key FROM services WHERE id = ?',
+        'SELECT imageKey FROM services WHERE id = ?',
         [serviceId]
       );
       
@@ -208,7 +208,7 @@ export default async function handler(req, res) {
       
       // Normalize key for consistent handling
       const normalizeKey = (key) => key ? key.trim() : null;
-      const keyToDelete = normalizeKey(services[0].image_key);
+      const keyToDelete = normalizeKey(services[0].imageKey);
       
       // 2. Delete record from database
       const [deleteResult] = await pool.execute('DELETE FROM services WHERE id = ?', [serviceId]);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import AdminLayout from '@/components/AdminLayout';
@@ -73,6 +73,7 @@ const AdminServices = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageUploadStatus, setImageUploadStatus] = useState('idle');
+  const [newImageUploaded, setNewImageUploaded] = useState(false);
 
   // Redirect if not authenticated or not admin/superadmin
   useEffect(() => {
@@ -81,38 +82,38 @@ const AdminServices = () => {
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 
-  // Fetch services
-  useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        setLoading(true);
-        const response = await api.getServices();
-        
-        if (response.services && Array.isArray(response.services)) {
-          setServices(response.services.map(service => ({
-            ...service,
-            imageUrl: service.imageUrl || service.image_url || '',
-            imageKey: service.imageKey || service.image_key || '',
-            displayImageUrl: (service.imageUrl || service.image_url) ? getFileUrl(service.imageUrl || service.image_url) : ''
-          })));
-        } else {
-          setServices([]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch services:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load services. Please try again later.',
-          variant: 'destructive',
-        });
+  const fetchServices = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await api.getServices();
+      
+      if (response.services && Array.isArray(response.services)) {
+        setServices(response.services.map(service => ({
+          ...service,
+          imageUrl: service.imageUrl || service.image_url || '',
+          imageKey: service.imageKey || service.image_key || '',
+          displayImageUrl: (service.imageUrl || service.image_url) ? getFileUrl(service.imageUrl || service.image_url) : ''
+        })));
+      } else {
         setServices([]);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    fetchServices();
+    } catch (error) {
+      console.error('Failed to fetch services:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load services. Please try again later.',
+        variant: 'destructive',
+      });
+      setServices([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Call fetchServices on component mount
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -137,21 +138,29 @@ const AdminServices = () => {
     resetForm();
     setIsEditing(false);
     setIsDialogOpen(true);
+    setNewImageUploaded(false);
   };
 
   const handleEdit = (service) => {
+    const normalizedImageUrl = service.imageUrl ? 
+      (service.imageUrl.includes('utfs.io') || service.imageUrl.includes('ufs.sh')) ? 
+        `https://utfs.io/f/${service.imageUrl.split('/').pop()}` : 
+        getFileUrl(service.imageUrl) : 
+      '';
+    
     setFormData({
       id: service.id,
       title: service.title,
       description: service.description,
       long_description: service.long_description || '',
-      imageUrl: service.image_url || '',
-      imageKey: service.image_key || '',
-      displayImageUrl: service.image_url ? getFileUrl(service.image_url) : ''
+      imageUrl: service.imageUrl || '',
+      imageKey: service.imageKey || '',
+      displayImageUrl: normalizedImageUrl
     });
     setIsEditing(true);
     setIsDialogOpen(true);
-    setImageUploadStatus(service.image_url ? 'complete' : 'idle');
+    setImageUploadStatus(service.imageUrl ? 'complete' : 'idle');
+    setNewImageUploaded(false);
   };
 
   const handleSubmit = async (e) => {
@@ -183,9 +192,21 @@ const AdminServices = () => {
         title: formData.title,
         description: formData.description,
         long_description: formData.long_description,
-        imageUrl: formData.imageUrl,
-        imageKey: formData.imageKey,
       };
+
+      if (!isEditing || newImageUploaded) { 
+        if (!formData.imageUrl) {
+          toast({
+            title: 'Missing Image',
+            description: 'Please upload an image for the service.',
+            variant: 'destructive',
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        payload.imageUrl = formData.imageUrl;
+        payload.imageKey = formData.imageKey;
+      }
 
       console.log('💾 Submitting payload:', payload);
 
@@ -198,20 +219,17 @@ const AdminServices = () => {
           
           toast({ title: 'Success', description: 'Service updated successfully' });
           
-          setServices(prevServices => 
-            prevServices.map(service => 
-              service.id === formData.id ? { 
-                ...service, 
-                title: payload.title,
-                description: payload.description,
-                long_description: payload.long_description,
-                imageUrl: payload.imageUrl ? getFileUrl(payload.imageUrl) : '',
-                image_url: payload.imageUrl,
-                image_key: payload.imageKey,
-                updated_at: new Date().toISOString() 
-              } : service
-            )
-          );
+          // Update the local state to reflect the changes immediately
+          setServices(prevServices => prevServices.map(service => 
+            service.id === formData.id 
+              ? {
+                  ...service,
+                  ...payload,
+                  // Ensure displayImageUrl is updated for UI rendering
+                  displayImageUrl: payload.imageUrl ? getFileUrl(payload.imageUrl) : service.displayImageUrl
+                }
+              : service
+          ));
         } else {
           console.log('➕ Creating new service');
           response = await api.addService(payload);
@@ -220,10 +238,23 @@ const AdminServices = () => {
           toast({ title: 'Success', description: 'Service created successfully' });
           
           if (response.service) {
+            // Properly format the new service object with consistent image URL handling
             const newService = {
               ...response.service,
-              imageUrl: response.service.image_url ? getFileUrl(response.service.image_url) : '',
+              // Ensure consistent field naming between backend and frontend
+              imageUrl: response.service.imageUrl || response.service.image_url || '',
+              imageKey: response.service.imageKey || response.service.image_key || '',
+              // Critical: Set displayImageUrl for UI rendering
+              displayImageUrl: (response.service.imageUrl || response.service.image_url) 
+                ? getFileUrl(response.service.imageUrl || response.service.image_url) 
+                : ''
             };
+            
+            console.log('🖼️ New service with image:', {
+              originalUrl: response.service.imageUrl || response.service.image_url,
+              normalizedDisplayUrl: newService.displayImageUrl
+            });
+            
             setServices(prevServices => [newService, ...prevServices]);
           }
         }
@@ -255,7 +286,7 @@ const AdminServices = () => {
     if (!serviceToDelete) return;
     
     try {
-      await api.services.delete(serviceToDelete.id);
+      await api.deleteService(serviceToDelete.id);
       
       setServices(prevServices => 
         prevServices.filter(service => service.id !== serviceToDelete.id)
@@ -295,7 +326,7 @@ const AdminServices = () => {
   }
 
   return (
-    <AdminLayout title="Manage Services">
+    <AdminLayout title="Services">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Manage Services</h1>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -356,23 +387,36 @@ const AdminServices = () => {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Service Image</Label>
                 <div className="space-y-4">
-                  {/* Image Preview Section */}
-                  {isEditing && formData.imageUrl && imageUploadStatus !== 'uploading' && (
-                    <div className="p-4 border rounded-lg bg-muted/20">
-                      <p className="text-sm font-medium mb-2">Current Image:</p>
-                      <div className="relative overflow-hidden rounded-md border bg-background">
+                  {/* Single Image Preview Section - Shows current or newly uploaded image */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <p className="text-sm font-medium mb-2">
+                      {newImageUploaded ? 'New Image:' : (isEditing ? 'Current Image:' : 'Preview:')}
+                    </p>
+                    <div className="relative overflow-hidden rounded-md border bg-background">
+                      {(formData.displayImageUrl) ? (
                         <img
                           src={formData.displayImageUrl}
-                          alt="Current Service Image"
+                          alt="Service Image"
                           className="w-full h-auto max-h-[120px] object-contain rounded"
-                          onError={(e) => { e.target.style.display = 'none'; }}
+                          onError={(e) => { 
+                            console.error("Image load error:", e);
+                            e.target.src = "/placeholder-image.png"; // Fallback to placeholder
+                            e.target.onerror = null; // Prevent infinite error loop
+                          }}
                         />
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">Upload a new image below to replace this one</p>
+                      ) : (
+                        <div className="w-full h-[120px] flex items-center justify-center bg-muted/20 text-muted-foreground text-sm">
+                          No image uploaded yet
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {isEditing && !newImageUploaded 
+                        ? "Upload a new image below to replace this one, or leave as is to keep the current image"
+                        : "Upload service image below"}
+                    </p>
+                  </div>
                   
-                  {/* Upload Section */}
                   <div className="p-4 border border-dashed rounded-lg bg-muted/10 flex flex-col items-center justify-center text-center">
                     <div className="mb-2 text-sm font-medium">
                       {imageUploadStatus === 'uploading' ? 'Uploading...' : 'Upload Service Image'}
@@ -387,11 +431,8 @@ const AdminServices = () => {
                           console.log("🖼️ Service Image Upload Completed:", res);
                           const oldImageKey = isEditing ? formData.imageKey : null;
                           
-                          // Use the URL from the processed result
-                          // Our UploadButtonWrapper already handles the ufsUrl vs url conversion
                           const uploadedFile = res[0];
                           
-                          // Update form data immediately with new image information
                           setFormData(prev => ({
                             ...prev,
                             imageUrl: uploadedFile.url,
@@ -402,7 +443,6 @@ const AdminServices = () => {
                           setImageUploadStatus('complete');
                           toast({ title: 'Success', description: 'Image uploaded successfully' });
                           
-                          // Handle old image cleanup if needed (non-blocking)
                           if (oldImageKey && oldImageKey !== uploadedFile.key) {
                             console.log("🗑️ Attempting to delete previous image with key:", oldImageKey);
                             toast({ 
@@ -411,10 +451,8 @@ const AdminServices = () => {
                               variant: 'default' 
                             });
                             
-                            // Store old key in case we need to retry later
                             const keyToDelete = oldImageKey;
                             
-                            // Create deletion function that can be reused
                             const deleteOldImage = (retry = false) => {
                               console.log(`${retry ? '🔄 Retrying' : '🗑️ Starting'} deletion for key: ${keyToDelete}`);
                               
@@ -423,33 +461,27 @@ const AdminServices = () => {
                                   console.log("🗑️ Old image deletion result:", result);
                                   if (result.success) {
                                     console.log("✅ Old image deleted successfully");
-                                    // Only show success toast if there's no warning flag
-                                    if (!result.warning) {
-                                      toast({ 
-                                        title: 'Success', 
-                                        description: 'Previous image cleaned up successfully',
-                                        variant: 'default'
-                                      });
-                                    }
+                                    toast({ 
+                                      title: 'Success', 
+                                      description: 'Previous image cleaned up successfully',
+                                      variant: 'default'
+                                    });
                                   } else {
                                     console.warn("⚠️ Deletion API returned unsuccessful result:", result);
-                                    // Silent failure - don't bother user with cleanup issues
-                                    // We'll log this info for admins to handle manually if needed
                                     console.info("💡 Manual cleanup may be needed for file key:", keyToDelete);
                                   }
                                   
-                                  // Always consider this a successful operation from the user's perspective
-                                  // The background cleanup should never interrupt their workflow
+                                  setNewImageUploaded(true);
                                 })
                                 .catch(err => {
                                   console.error("❌ Failed to delete old image:", err);
-                                  // Don't show toast for deletion errors to avoid confusing the user
                                   console.info("💡 Manual cleanup may be needed for file key:", keyToDelete);
                                 });
                             };
                             
-                            // Execute deletion (non-blocking)
                             deleteOldImage();
+                          } else {
+                            setNewImageUploaded(true);
                           }
                         } else {
                           console.error("Image upload failed or response incorrect:", res);
@@ -468,7 +500,6 @@ const AdminServices = () => {
                       }}
                     />
                     
-                    {/* Status Messages */}
                     {imageUploadStatus === 'uploading' && (
                       <div className="flex items-center text-sm text-blue-500 mt-1">
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -477,8 +508,10 @@ const AdminServices = () => {
                     )}
                     
                     {imageUploadStatus === 'complete' && formData.imageUrl && (
-                      <div className="flex items-center text-sm text-green-600 mt-1">
-                        <div className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">Image Uploaded</div>
+                      <div className="mt-1 space-y-2">
+                        <div className="flex items-center text-sm text-green-600">
+                          <div className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">Image Uploaded</div>
+                        </div>
                       </div>
                     )}
                     
@@ -544,12 +577,16 @@ const AdminServices = () => {
                 {services.map((service) => (
                   <TableRow key={service.id}>
                      <TableCell>
-                       {service.imageUrl ? (
+                       {service.displayImageUrl ? (
                          <img
-                           src={service.imageUrl}
+                           src={service.displayImageUrl}
                            alt={service.title}
                            className="h-10 w-10 object-cover rounded"
-                           onError={(e) => { e.target.style.display = 'none'; }}
+                           onError={(e) => { 
+                             console.error("Service list image load error:", e);
+                             e.target.src = "/placeholder-image.png"; 
+                             e.target.onerror = null;
+                           }}
                          />
                        ) : (
                          <div className="h-10 w-10 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">No Img</div>

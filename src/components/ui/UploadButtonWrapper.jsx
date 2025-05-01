@@ -96,7 +96,7 @@ const UploadButtonWrapper = ({
       case 'imageUploader':
         return "image/*";
       case 'documentUploader':
-        return "*/*"; // Accept all file types
+        return "application/pdf"; // Only accept PDF files
       default:
         return "*/*"; // Accept all file types by default
     }

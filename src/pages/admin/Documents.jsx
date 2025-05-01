@@ -52,11 +52,16 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { 
-  Pencil, 
-  Trash, 
+  Pencil,
+  Trash,
   Plus,
   Eye,
   Loader2,
+  FileText, // Word
+  FileSpreadsheet, // Excel
+  Presentation, // Corrected PowerPoint icon name
+  // FiletypePdf, // Removed incorrect PDF icon name
+  File, // Generic/Other (Will use this for PDF too)
 } from 'lucide-react';
 import { api, handleApiError } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
@@ -77,6 +82,23 @@ const formatDate = (dateString) => {
   }
 };
 
+// Helper function to get icon based on original file type
+const getIconForType = (type) => {
+  const iconClass = "h-5 w-5"; // Consistent icon size
+  switch (type?.toLowerCase()) {
+    case 'word':
+      return <FileText className={iconClass} aria-label="Word Document" />;
+    case 'excel':
+      return <FileSpreadsheet className={iconClass} aria-label="Excel Spreadsheet" />;
+    case 'powerpoint':
+      return <Presentation className={iconClass} aria-label="PowerPoint Presentation" />; // Use corrected name
+    case 'pdf':
+      return <File className={iconClass} aria-label="PDF Document" />; // Use generic File icon for PDF
+    default:
+      return <File className={iconClass} aria-label="Document" />;
+  }
+};
+
 const AdminDocuments = () => {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const navigate = useNavigate();
@@ -91,7 +113,9 @@ const AdminDocuments = () => {
     documentKey: '',
     thumbnailUrl: '',
     thumbnailKey: '',
-    documentType: ''
+    documentType: '',
+    originalDocumentType: '',
+    preview_page_limit: 1 // Add preview page limit field with default value 1
   });
   const [isEditing, setIsEditing] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -103,6 +127,15 @@ const AdminDocuments = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [documentUploadStatus, setDocumentUploadStatus] = useState('idle');
   const [thumbnailUploadStatus, setThumbnailUploadStatus] = useState('idle');
+
+  // Define original document types
+  const originalDocumentTypes = [
+    { value: 'word', label: 'Word Document (.docx, .doc)' },
+    { value: 'excel', label: 'Excel Spreadsheet (.xlsx, .xls)' },
+    { value: 'powerpoint', label: 'PowerPoint Presentation (.pptx, .ppt)' },
+    { value: 'pdf', label: 'PDF Document (.pdf)' },
+    { value: 'other', label: 'Other' },
+  ];
 
   // Redirect if not authenticated or not admin/superadmin
   useEffect(() => {
@@ -122,7 +155,8 @@ const AdminDocuments = () => {
           setDocuments(response.documents.map(doc => ({
             ...doc,
             documentUrl: doc.document_url || '',
-            thumbnailUrl: doc.thumbnail_url || ''
+            thumbnailUrl: doc.thumbnail_url || '',
+            original_file_type: doc.original_file_type || 'other' // Ensure it exists
           })));
         } else {
           setDocuments([]);
@@ -149,11 +183,13 @@ const AdminDocuments = () => {
   };
 
   const handleSelectChange = (name, value) => {
-    if (value === "custom") {
+    if (name === 'category' && value === "custom") {
       setShowCustomCategoryInput(true);
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
-      setShowCustomCategoryInput(false);
+      if (name === 'category') {
+        setShowCustomCategoryInput(false);
+      }
     }
   };
 
@@ -194,7 +230,9 @@ const AdminDocuments = () => {
       documentKey: '',
       thumbnailUrl: '',
       thumbnailKey: '',
-      documentType: ''
+      documentType: '',
+      originalDocumentType: '',
+      preview_page_limit: 1 // Reset preview page limit field
     });
     setIsEditing(false);
     setDocumentUploadStatus('idle');
@@ -220,7 +258,9 @@ const AdminDocuments = () => {
       documentKey: document.document_key || '',
       thumbnailUrl: document.thumbnail_url || '',
       thumbnailKey: document.thumbnail_key || '',
-      documentType: document.file_type || ''
+      documentType: document.file_type || '',
+      originalDocumentType: document.original_file_type || '',
+      preview_page_limit: document.preview_page_limit || 1 // Set preview page limit field
     });
     setIsEditing(true);
     setIsDialogOpen(true);
@@ -240,17 +280,29 @@ const AdminDocuments = () => {
     // Log the state right before validation
     console.log('💾 Checking formData before validation:', formData);
     
-    // Ensure file type is captured in formData
-    if (!isEditing && (!formData.documentUrl || !formData.thumbnailUrl || !formData.documentType)) {
+    // Validate original document type selection
+    if (!formData.originalDocumentType) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please select the original document type.',
+        variant: 'destructive',
+      });
+      setIsSubmitting(false);
+      return;
+    }
+    
+    // Ensure file type is captured in formData (from PDF upload)
+    // We are enforcing PDF upload, so documentType should ideally be 'application/pdf' if upload succeeds
+    // The validation for documentUrl should suffice
+    if (!isEditing && (!formData.documentUrl || !formData.thumbnailUrl)) {
        toast({
-         title: 'Missing Files or Type',
-         description: 'Please upload both a document and a thumbnail, and ensure file type was captured.',
+         title: 'Missing Files',
+         description: 'Please upload both a document (PDF) and a thumbnail.',
          variant: 'destructive',
        });
-       console.error('Validation Failed: Missing URL or Type.', { 
-           docUrl: formData.documentUrl, 
-           thumbUrl: formData.thumbnailUrl, 
-           docType: formData.documentType 
+       console.error('Validation Failed: Missing URL.', {
+           docUrl: formData.documentUrl,
+           thumbUrl: formData.thumbnailUrl,
        });
        setIsSubmitting(false);
        return;
@@ -273,20 +325,20 @@ const AdminDocuments = () => {
         category: formData.category,
         documentUrl: formData.documentUrl,
         documentKey: formData.documentKey,
-        documentType: formData.documentType,
+        documentType: formData.documentType, // NEW: include documentType
+        originalDocumentType: formData.originalDocumentType,
         thumbnailUrl: formData.thumbnailUrl,
         thumbnailKey: formData.thumbnailKey,
+        preview_page_limit: formData.preview_page_limit // Include preview page limit in payload
       };
 
-      console.log('💾 Submitting payload:', payload);
+      console.log('�� Submitting payload:', payload);
 
       let response;
       if (isEditing) {
-        const updatePayload = { ...payload };
-        delete updatePayload.documentType;
-        response = await api.updateDocument(formData.id, updatePayload);
+        response = await api.updateDocument(formData.id, payload);
         setDocuments(prev => prev.map(doc =>
-          doc.id === formData.id ? { ...doc, ...payload, updated_at: new Date().toISOString() } : doc
+          doc.id === formData.id ? { ...doc, ...payload, updated_at: new Date().toISOString(), original_file_type: payload.originalDocumentType } : doc
         ));
         toast({ title: 'Success', description: 'Document updated successfully!' });
       } else {
@@ -295,7 +347,8 @@ const AdminDocuments = () => {
            ...response.document,
            documentUrl: response.document?.document_url || payload.documentUrl,
            thumbnailUrl: response.document?.thumbnail_url || payload.thumbnailUrl,
-           file_type: response.document?.file_type || payload.documentType
+           file_type: response.document?.file_type || 'application/pdf',
+           original_file_type: response.document?.original_file_type || payload.originalDocumentType
          };
         setDocuments(prev => [newDocument, ...prev]);
         toast({ title: 'Success', description: 'Document added successfully!' });
@@ -324,7 +377,8 @@ const AdminDocuments = () => {
     if (!documentToDelete) return;
     
     try {
-      await api.documents.delete(documentToDelete.id);
+      // Replace incorrect api.documents.delete() with api.deleteDocument()
+      await api.deleteDocument(documentToDelete.id);
       
       setDocuments(prevDocuments => 
         prevDocuments.filter(doc => doc.id !== documentToDelete.id)
@@ -430,46 +484,86 @@ const AdminDocuments = () => {
               </div>
 
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Document File</Label>
+                <Label htmlFor="originalDocumentType" className="text-right">Original Type</Label>
+                <div className="col-span-3">
+                  <Select
+                    name="originalDocumentType"
+                    value={formData.originalDocumentType}
+                    onValueChange={(value) => handleSelectChange('originalDocumentType', value)}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select original document type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Original Document Format</SelectLabel>
+                        {originalDocumentTypes.map(type => (
+                          <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">Select the original format before converting to PDF.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="preview_page_limit" className="text-right">Preview Page Limit</Label>
+                <Input
+                  id="preview_page_limit"
+                  name="preview_page_limit"
+                  value={formData.preview_page_limit}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  type="number"
+                  min={1}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Document File (PDF)</Label>
                 <div className="col-span-3">
                   <UploadButtonWrapper
                     endpoint="documentUploader"
-                    buttonText="Upload Document"
+                    buttonText="Upload PDF Document"
+                    accept="application/pdf" // Enforce PDF uploads only
                     onClientUploadComplete={(res) => {
-                      if (res && res.length > 0 && res[0].serverData) {
-                        console.log("📄 Document Upload Completed:", res);
+                      if (res && res.length > 0) {
+                        console.log("📄 PDF Upload Completed:", res);
                         setFormData(prev => ({
                           ...prev,
                           documentUrl: res[0].url,
                           documentKey: res[0].key,
-                          documentType: res[0].serverData.type
+                          documentType: 'application/pdf'
                         }));
                         setDocumentUploadStatus('complete');
-                        toast({ title: 'Success', description: 'Document uploaded.' });
+                        toast({ title: 'Success', description: 'PDF Document uploaded.' });
                       } else {
-                         console.error("Document upload failed or response format incorrect:", res);
+                         console.error("PDF upload failed or response format incorrect:", res);
                          setDocumentUploadStatus('error');
-                         toast({ title: 'Upload Error', description: 'Document upload response missing expected data.', variant: 'destructive'});
+                         toast({ title: 'Upload Error', description: 'PDF upload response missing expected data.', variant: 'destructive'});
                       }
                     }}
                     onUploadError={(error) => {
-                      console.error(`❌ Document Upload Error: ${error.message}`);
+                      console.error(`❌ PDF Upload Error: ${error.message}`);
                       setDocumentUploadStatus('error');
-                      toast({ title: 'Upload Error', description: `Document: ${error.message}`, variant: 'destructive'});
+                      toast({ title: 'Upload Error', description: `PDF: ${error.message}`, variant: 'destructive'});
                     }}
                     onUploadBegin={() => {
-                       console.log("🚀 Document Upload Started");
+                       console.log("🚀 PDF Upload Started");
                        setDocumentUploadStatus('uploading');
                     }}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">You can upload any type of file (max size: 30MB)</p>
-                  {documentUploadStatus === 'uploading' && <p className="text-sm text-blue-500 mt-1">Uploading document...</p>}
+                  <p className="text-xs text-muted-foreground mt-1">Only PDF files are accepted (max size: 30MB).</p>
+                  {documentUploadStatus === 'uploading' && <p className="text-sm text-blue-500 mt-1">Uploading PDF...</p>}
                   {documentUploadStatus === 'complete' && formData.documentUrl && (
                     <p className="text-sm text-green-600 mt-1">
                       Document uploaded: <a href={formData.documentUrl} target="_blank" rel="noopener noreferrer" className="underline">{formData.documentUrl.split('/').pop()}</a>
                     </p>
                   )}
-                   {documentUploadStatus === 'error' && <p className="text-sm text-red-500 mt-1">Document upload failed.</p>}
+                   {documentUploadStatus === 'error' && <p className="text-sm text-red-500 mt-1">PDF upload failed.</p>}
                    {isEditing && formData.documentUrl && documentUploadStatus !== 'uploading' && (
                      <p className="text-sm text-gray-500 mt-1">
                        Current: <a href={formData.documentUrl} target="_blank" rel="noopener noreferrer" className="underline">{formData.documentUrl.split('/').pop()}</a>. Upload new to replace.
@@ -568,6 +662,7 @@ const AdminDocuments = () => {
                 <TableRow>
                   <TableHead>Thumbnail</TableHead>
                   <TableHead>Title</TableHead>
+                  <TableHead>Type</TableHead> {/* Add Type column */}
                   <TableHead>Category</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Updated</TableHead>
@@ -590,6 +685,7 @@ const AdminDocuments = () => {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">{doc.title}</TableCell>
+                    <TableCell>{getIconForType(doc.original_file_type)}</TableCell> {/* Display Icon */}
                     <TableCell>{doc.category || 'N/A'}</TableCell>
                     <TableCell>{formatDate(doc.created_at)}</TableCell>
                     <TableCell>{formatDate(doc.updated_at)}</TableCell>
@@ -639,4 +735,4 @@ const AdminDocuments = () => {
   );
 };
 
-export default AdminDocuments; 
+export default AdminDocuments;

@@ -64,7 +64,7 @@ export default async function handler(req, res) {
       console.log(`GET /api/documents/${targetDocumentId} request`);
       // Select URL/Key columns, removed document_path
       const [documents] = await pool.execute(
-        'SELECT id, title, description, category, document_url, document_key, thumbnail_url, thumbnail_key, file_type, created_at, updated_at FROM documents WHERE id = ?', 
+        'SELECT id, title, description, category, document_url, document_key, thumbnail_url, thumbnail_key, file_type, original_file_type, preview_page_limit, created_at, updated_at FROM documents WHERE id = ?',
         [targetDocumentId]
       );
       if (!documents || documents.length === 0) {
@@ -82,113 +82,112 @@ export default async function handler(req, res) {
     if (!authenticatedUser) return;
 
     try {
-      console.log(`⚙️ PUT /api/documents/${targetDocumentId} request (admin)`);
+      console.log(`PUT /api/documents/${targetDocumentId} request (admin)`);
+
       // Expecting JSON payload
-      const { 
-        title, 
-        description, 
-        category, 
-        documentUrl, 
-        documentKey, 
-        thumbnailUrl, 
-        thumbnailKey 
+      const {
+        title,
+        description,
+        category,
+        documentUrl,
+        documentKey,
+        originalDocumentType, 
+        thumbnailUrl,
+        thumbnailKey,
+        preview_page_limit
       } = req.body;
 
       console.log('Received payload for update:', req.body);
 
-      // Basic validation
-      if (!title || !description) {
-        return res.status(400).json({ message: 'Title and description are required.' });
-      }
-       // If URL is present, key should be too
-       if (documentUrl && !documentKey) return res.status(400).json({ message: 'Document Key is missing.' });
-       if (thumbnailUrl && !thumbnailKey) return res.status(400).json({ message: 'Thumbnail Key is missing.' });
-
-      // 1. Fetch current document data (including old keys) before update
+      // 1. Fetch current document data (needed for file deletion logic)
       const [currentDocs] = await pool.execute(
-        'SELECT document_key, thumbnail_key FROM documents WHERE id = ?', 
+        'SELECT document_key, thumbnail_key, document_url, thumbnail_url FROM documents WHERE id = ?', 
         [targetDocumentId]
       );
 
       if (!currentDocs || currentDocs.length === 0) {
         return res.status(404).json({ message: 'Document not found for update.' });
       }
-      const oldDoc = currentDocs[0];
-      console.log('Old keys:', oldDoc);
+      const currentDoc = currentDocs[0];
 
-      // 2. Update database record with new data (including potentially new URLs/Keys)
-      const updateFields = [];
-      const updateParams = [];
-
-      if (title) { updateFields.push('title = ?'); updateParams.push(title); }
-      if (description) { updateFields.push('description = ?'); updateParams.push(description); }
-      if (category) { updateFields.push('category = ?'); updateParams.push(category); }
-      // Only update URL/Key if a new one was provided in the payload
-      if (documentUrl !== undefined) { 
-        updateFields.push('document_url = ?'); 
-        updateParams.push(documentUrl || null);
+      // 2. Build the update query dynamically
+      const fieldsToUpdate = {};
+      if (title !== undefined) fieldsToUpdate.title = title;
+      if (description !== undefined) fieldsToUpdate.description = description;
+      if (category !== undefined) fieldsToUpdate.category = category || 'other'; 
+      if (documentUrl !== undefined) fieldsToUpdate.document_url = documentUrl;
+      if (documentKey !== undefined) fieldsToUpdate.document_key = documentKey;
+      if (thumbnailUrl !== undefined) fieldsToUpdate.thumbnail_url = thumbnailUrl; 
+      if (thumbnailKey !== undefined) fieldsToUpdate.thumbnail_key = thumbnailKey; 
+      if (originalDocumentType !== undefined) fieldsToUpdate.original_file_type = originalDocumentType;
+      if (preview_page_limit !== undefined) {
+          fieldsToUpdate.preview_page_limit = parseInt(preview_page_limit) || 1; 
       }
-      if (documentKey !== undefined) { updateFields.push('document_key = ?'); updateParams.push(documentKey || null); }
-      if (thumbnailUrl !== undefined) { updateFields.push('thumbnail_url = ?'); updateParams.push(thumbnailUrl || null); }
-      if (thumbnailKey !== undefined) { updateFields.push('thumbnail_key = ?'); updateParams.push(thumbnailKey || null); }
-      
-      if (updateFields.length === 0) {
+
+      const fieldNames = Object.keys(fieldsToUpdate);
+      const fieldValues = Object.values(fieldsToUpdate);
+
+      // Check if there's anything to update
+      if (fieldNames.length === 0) {
           return res.status(400).json({ message: 'No fields provided for update.' });
       }
 
-      updateParams.push(targetDocumentId); // For the WHERE clause
-      const updateQuery = `UPDATE documents SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
-      
-      console.log('Executing DB Update:', updateQuery, updateParams);
+      const setClauses = fieldNames.map(name => `${name} = ?`).join(', ');
+      const updateQuery = `UPDATE documents SET ${setClauses} WHERE id = ?`;
+      const updateParams = [...fieldValues, targetDocumentId];
+
+      // 3. Execute the update query
+      console.log('Executing update query:', updateQuery, updateParams);
       const [updateResult] = await pool.execute(updateQuery, updateParams);
+      console.log('Update result:', updateResult);
 
       if (updateResult.affectedRows === 0) {
-          return res.status(404).json({ message: 'Document not found or no changes made.' });
+        // This might happen if the ID doesn't exist, though we checked earlier
+        return res.status(404).json({ message: 'Document not found or no changes made.' });
       }
-      console.log('Document updated successfully in DB.');
 
-      // 3. Delete old files from UploadThing if new ones were uploaded
+      console.log('Document updated successfully in DB.'); // <<< Log success
+
+      // 3b. Delete old files from UploadThing if new keys were provided
       const keysToDelete = [];
-      
-      // Normalize keys before comparison
-      const normalizeKey = (key) => key ? key.trim() : null;
-      const oldDocKey = normalizeKey(oldDoc.document_key);
-      const oldThumbKey = normalizeKey(oldDoc.thumbnail_key);
-      const newDocKey = normalizeKey(documentKey);
-      const newThumbKey = normalizeKey(thumbnailKey);
-      
-      if (newDocKey !== undefined && oldDocKey && oldDocKey !== newDocKey) {
+      const normalizeKey = (key) => key ? key.trim() : null; // Helper to handle null/whitespace
+
+      const oldDocKey = normalizeKey(currentDoc.document_key);
+      const oldThumbKey = normalizeKey(currentDoc.thumbnail_key);
+      const newDocKeyProvided = req.body.documentKey !== undefined; // Check if key was in the request
+      const newThumbKeyProvided = req.body.thumbnailKey !== undefined;
+      const newDocKey = normalizeKey(req.body.documentKey);
+      const newThumbKey = normalizeKey(req.body.thumbnailKey);
+
+      // Delete old document if a new one was provided AND it's different
+      if (newDocKeyProvided && oldDocKey && oldDocKey !== newDocKey) {
           keysToDelete.push(oldDocKey);
       }
-      if (newThumbKey !== undefined && oldThumbKey && oldThumbKey !== newThumbKey) {
+      // Delete old thumbnail if a new one was provided AND it's different
+      if (newThumbKeyProvided && oldThumbKey && oldThumbKey !== newThumbKey) {
           keysToDelete.push(oldThumbKey);
       }
 
       if (keysToDelete.length > 0) {
-          console.log('Attempting to delete files from UploadThing:', keysToDelete);
-          
-          // Process each key sequentially using the direct helper function
+          console.log('Attempting to delete outdated files from UploadThing:', keysToDelete);
           for (const fileKey of keysToDelete) {
               try {
-                  // Use our direct helper function
                   const deleteResult = await deleteFile(fileKey);
                   console.log(`Delete result for file ${fileKey}:`, deleteResult);
-                  
-                  // Log warning only if there was an explicit failure
                   if (!deleteResult.success) {
-                      console.warn(`Warning while deleting document file ${fileKey}:`, deleteResult);
+                      console.warn(`Warning while deleting outdated file ${fileKey}:`, deleteResult);
                   }
               } catch (error) {
-                  console.error(`Error deleting file ${fileKey}:`, error);
-                  // Log error but don't fail the request
+                  console.error(`Error deleting outdated file ${fileKey}:`, error);
+                  // Log error but don't fail the main update request
               }
           }
       }
-      
+
       // 4. Fetch updated document data to return
       const [updatedDocumentData] = await pool.execute(
-        // Removed document_path from SELECT list
-        'SELECT id, title, description, category, document_url, document_key, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?', 
+        // Include original_file_type and preview_page_limit in the SELECT list
+        'SELECT id, title, description, category, document_url, document_key, thumbnail_url, thumbnail_key, file_type, original_file_type, preview_page_limit, created_at, updated_at FROM documents WHERE id = ?', 
         [targetDocumentId]
       );
 

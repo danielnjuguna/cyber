@@ -41,7 +41,9 @@ const DocumentView = () => {
             description: response.document.description,
             longDescription: response.document.description,
             category: response.document.category || 'uncategorized',
-            fileType: response.document.file_type || null, // <<< Get file_type
+            fileType: response.document.file_type || null, // Internal file type (for viewer functionality)
+            displayFileType: response.document.original_file_type || response.document.file_type || null, // Display file type (original format)
+            previewPageLimit: response.document.preview_page_limit || 1, // Get preview page limit, default to 1
             thumbnailUrl: response.document.thumbnail_url
               ? getFileUrl(response.document.thumbnail_url)
               : 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=2070&auto=format&fit=crop',
@@ -230,9 +232,10 @@ const DocumentView = () => {
                     
                     {document.previewUrl ? (
                       <DocumentViewer
-                        documentUrl={document.previewUrl}
+                        fileUrl={document.previewUrl} // <<< Rename prop to fileUrl
                         documentTitle={document.title}
-                        fileType={document.fileType} // <<< Pass fileType prop
+                        fileType={document.fileType} 
+                        previewPageLimit={document.previewPageLimit} // Pass the limit to the viewer
                         className="mt-4"
                       />
                     ) : (
@@ -261,10 +264,10 @@ const DocumentView = () => {
                           <span className="font-medium">Limited Preview</span>
                         </div>
                         {/* Display File Type if available */}
-                        {document.fileType && (
+                        {document.displayFileType && (
                            <div className="flex items-center gap-2">
                              <span className="text-muted-foreground">File Type:</span>
-                             <span className="font-medium">{document.fileType.toUpperCase()}</span>
+                             <span className="font-medium">{document.displayFileType.toUpperCase()}</span>
                            </div>
                         )}
                       </div>

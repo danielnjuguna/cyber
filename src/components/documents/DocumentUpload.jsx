@@ -14,6 +14,7 @@ export function DocumentUpload() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
+  const [previewPageLimit, setPreviewPageLimit] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [documentUploadStatus, setDocumentUploadStatus] = useState('idle');
   const [thumbnailUploadStatus, setThumbnailUploadStatus] = useState('idle');
@@ -70,26 +71,21 @@ export function DocumentUpload() {
     setIsSubmitting(true);
 
     try {
-      console.log('Submitting document data:', {
+      const documentPayload = {
         title,
         description,
         category,
-        documentUrl: documentData.url,
-        documentKey: documentData.key,
-        thumbnailUrl: thumbnailData.url,
-        thumbnailKey: thumbnailData.key,
-      });
+        document_url: documentData.url,
+        document_key: documentData.key,
+        thumbnail_url: thumbnailData.url,
+        thumbnail_key: thumbnailData.key,
+        preview_page_limit: parseInt(previewPageLimit) || 1,
+      };
+
+      console.log('Submitting document data:', documentPayload);
 
       // Use the API to create the document with UploadThing URLs and keys
-      const response = await api.addDocument({
-        title,
-        description,
-        category,
-        documentUrl: documentData.url,
-        documentKey: documentData.key,
-        thumbnailUrl: thumbnailData.url,
-        thumbnailKey: thumbnailData.key,
-      });
+      const response = await api.addDocument(documentPayload);
 
       console.log('Document created successfully:', response);
       
@@ -251,6 +247,22 @@ export function DocumentUpload() {
             <p className="text-sm text-red-500">Thumbnail upload failed.</p>
           )}
         </div>
+      </div>
+      
+      <div className="mb-4">
+        <Label htmlFor="previewPageLimit">Preview Page Limit</Label>
+        <Input
+          id="previewPageLimit"
+          type="number"
+          value={previewPageLimit}
+          onChange={(e) => setPreviewPageLimit(Math.max(1, parseInt(e.target.value) || 1))}
+          min="1"
+          placeholder="Number of pages for preview (min 1)"
+          className="mt-1"
+        />
+        <p className="text-sm text-muted-foreground mt-1">
+          Users will be able to preview this many pages before needing full access.
+        </p>
       </div>
       
       <Button 

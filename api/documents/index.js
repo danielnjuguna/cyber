@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     // --- Handle GET: Get all documents (Public, with filter/search) ---
     try {
       console.log('GET /api/documents request', req.query);
-      let query = 'SELECT id, title, description, document_url, document_key, thumbnail_url, thumbnail_key, category, file_type, created_at, updated_at FROM documents';
+      let query = 'SELECT id, title, description, document_url, document_key, thumbnail_url, thumbnail_key, category, file_type, original_file_type, created_at, updated_at FROM documents';
       const params = [];
       const conditions = [];
 
@@ -85,15 +85,17 @@ export default async function handler(req, res) {
     try {
       console.log('POST /api/documents request (admin)');
       // Expecting JSON payload now
-      const { 
-        title, 
-        description, 
-        category, 
-        documentUrl, 
-        documentKey, 
-        documentType,
-        thumbnailUrl, 
-        thumbnailKey 
+      const {
+        title,
+        description,
+        category,
+        documentUrl,
+        documentKey,
+        documentType, // This should be the type of the uploaded file (PDF)
+        originalDocumentType, // This is the user-selected original type
+        thumbnailUrl,
+        thumbnailKey,
+        preview_page_limit // Get preview page limit from body
       } = req.body;
 
       console.log('Received payload:', req.body);
@@ -102,35 +104,41 @@ export default async function handler(req, res) {
       if (!title || !description) {
         return res.status(400).json({ message: 'Title and description are required.' });
       }
-      if (!documentUrl || !documentKey || !documentType) {
+      if (!documentUrl || !documentKey || !documentType ) {
          return res.status(400).json({ message: 'Document URL, Key, and Type are required.' });
+      }
+      // Add validation for originalDocumentType
+      if (!originalDocumentType) {
+        return res.status(400).json({ message: 'Original Document Type is required.' });
       }
       // Thumbnail is optional, but if URL is present, Key should be too (usually)
        if (thumbnailUrl && !thumbnailKey) {
          console.warn('Thumbnail URL provided but Key is missing. Proceeding, but this might indicate an issue.');
        }
 
-      // Save document details to the database including file_type
+      // Save document details to the database including file_type and preview_page_limit
       const [result] = await pool.execute(
-        'INSERT INTO documents (title, description, category, file_type, document_url, document_key, thumbnail_url, thumbnail_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO documents (title, description, category, file_type, original_file_type, document_url, document_key, thumbnail_url, thumbnail_key, preview_page_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             title,
             description,
             category || 'other', // Default category
-            documentType,
+            documentType, // The actual uploaded file type (PDF)
+            originalDocumentType, // The user-selected original type
             documentUrl,
             documentKey,
             thumbnailUrl || null, // Store null if no thumbnail provided
-            thumbnailKey || null
+            thumbnailKey || null,
+            parseInt(preview_page_limit) || 1 // Add parsed value with default
         ]
       );
 
       const newDocumentId = result.insertId;
       console.log(`Document created with ID: ${newDocumentId}`);
 
-      // Fetch the created document to return it, including file_type
+      // Fetch the created document to return it, including preview_page_limit
       const [newDocumentData] = await pool.execute(
-        'SELECT id, title, description, category, file_type, document_url, document_key, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
+        'SELECT id, title, description, category, file_type, original_file_type, preview_page_limit, document_url, document_key, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
         [newDocumentId]
       );
 

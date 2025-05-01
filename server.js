@@ -270,6 +270,40 @@ const setupRoutes = async () => {
           })
         );
         console.log('    ✓ /api/uploadthing configured with createRouteHandler');
+        
+        // Add a custom endpoint for file deletion
+        app.post('/api/uploadthing/delete', async (req, res) => {
+          try {
+            const { fileKey } = req.body;
+            
+            if (!fileKey) {
+              return res.status(400).json({ 
+                success: false, 
+                message: 'Missing fileKey parameter' 
+              });
+            }
+            
+            console.log(`📁 File deletion request for key: ${fileKey}`);
+            
+            // Import the deleteFile function from core.js
+            const { deleteFile } = await import('./api/core.js');
+            
+            // Call the deleteFile function
+            const result = await deleteFile(fileKey);
+            console.log('File deletion result:', result);
+            
+            // Return the result
+            return res.json(result);
+          } catch (error) {
+            console.error('Error handling file deletion:', error);
+            return res.status(500).json({ 
+              success: false, 
+              message: 'Server error during file deletion',
+              error: error.message
+            });
+          }
+        });
+        console.log('    ✓ /api/uploadthing/delete endpoint configured');
       } catch (utError) {
          console.error('    ❌ Error configuring UploadThing createRouteHandler:', utError);
          app.use('/api/uploadthing', (req, res) => res.status(503).json({ message: 'UploadThing unavailable due to config error' }));

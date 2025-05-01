@@ -358,14 +358,11 @@ export const api = {
     try {
       console.log(`🗑️ Attempting to delete file with key: ${fileKey}`);
       
-      // Make sure we're sending the request to the proper endpoint
-      const deleteUrl = API_ENDPOINTS.DELETE_FILE(fileKey);
-      console.log(`DELETE request URL: ${deleteUrl}`);
-      
-      // Call the direct API to delete the file
-      const response = await fetch(deleteUrl, {
-        method: 'DELETE',
+      // Instead of calling a custom API endpoint, use the server's deleteFile function via POST
+      const response = await fetch(`${API_ENDPOINTS.UPLOADTHING}/delete`, {
+        method: 'POST',
         headers: getHeaders(),
+        body: JSON.stringify({ fileKey })
       });
       
       // Log response details for debugging

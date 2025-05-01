@@ -10,7 +10,8 @@ const alterCommands = [
    ADD COLUMN document_url VARCHAR(1024) NULL AFTER category,
    ADD COLUMN document_key VARCHAR(255) NULL AFTER document_url,
    ADD COLUMN thumbnail_url VARCHAR(1024) NULL AFTER document_key,
-   ADD COLUMN thumbnail_key VARCHAR(255) NULL AFTER thumbnail_url;`,
+   ADD COLUMN thumbnail_key VARCHAR(255) NULL AFTER thumbnail_url,
+   ADD COLUMN original_file_type VARCHAR(50) NULL AFTER file_type;`,
   // Update the services table (Corrected Syntax)
   `ALTER TABLE services
    ADD COLUMN image_url VARCHAR(1024) NULL AFTER long_description,
