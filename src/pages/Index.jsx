@@ -106,8 +106,8 @@ const Index = () => {
             title: service.title,
             description: service.description,
             icon: getServiceIcon(service.title),
-            imageUrl: service.image_url
-              ? getFileUrl(service.image_url)
+            imageUrl: service.imageUrl 
+              ? getFileUrl(service.imageUrl) 
               : null
           }));
           
