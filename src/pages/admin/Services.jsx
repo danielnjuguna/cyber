@@ -89,9 +89,11 @@ const AdminServices = () => {
         const response = await api.getServices();
         
         if (response.services && Array.isArray(response.services)) {
-          setServices(response.services.map(svc => ({
-            ...svc,
-            imageUrl: svc.image_url ? getFileUrl(svc.image_url) : ''
+          setServices(response.services.map(service => ({
+            ...service,
+            imageUrl: service.imageUrl || service.image_url || '',
+            imageKey: service.imageKey || service.image_key || '',
+            displayImageUrl: (service.imageUrl || service.image_url) ? getFileUrl(service.imageUrl || service.image_url) : ''
           })));
         } else {
           setServices([]);
