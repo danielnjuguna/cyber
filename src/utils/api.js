@@ -2,20 +2,54 @@ import { toast } from '@/hooks/use-toast';
 import { API_ENDPOINTS, getFileUrl } from './config';
 
 const handleResponse = async (response) => {
+  // Handle cases with no content (like DELETE)
+  if (response.status === 204) {
+    return { success: true };
+  }
+  
   const data = await response.json();
+  
   if (!response.ok) {
-    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+    // Create a custom error object that includes the status
+    const error = new Error(data.message || `HTTP error! status: ${response.status}`);
+    error.status = response.status; // Attach the status code
+    error.data = data; // Attach the response data if needed
+    throw error;
   }
   return data;
 };
 
-const handleError = (error) => {
-  console.error('API Error:', error);
+const handleError = (error, operationDescription = 'API request') => {
+  console.error(`API Error during ${operationDescription}:`, error);
+  
+  // Check specifically for 401 Unauthorized, potentially due to expired token
   if (error.status === 401) {
+    console.warn('Received 401 Unauthorized. Logging out.');
+    // Clear authentication token from local storage
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    // Optionally clear other user-related data from storage or context
+    
+    // Display a toast message to the user
+    toast({
+      title: 'Session Expired',
+      description: 'Your session has expired. Please log in again.',
+      variant: 'destructive',
+    });
+    
+    // Redirect to login page after a short delay to allow toast to be seen
+    setTimeout(() => {
+      // Use window.location to force a full page reload, clearing component state
+      window.location.href = '/login'; 
+    }, 1500); 
+    
+    // Prevent further error handling for this specific case
+    return; // Important: Stop further execution in this handler
   }
-  throw error;
+
+  // For other errors, you might still want to throw them or handle differently
+  // For now, let's just throw it so individual components can catch if needed,
+  // but the generic console.error above has already logged it.
+  throw error; 
 };
 
 const getHeaders = () => {
@@ -43,7 +77,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      handleError(error);
+      handleError(error, 'login');
     }
   },
 
@@ -56,7 +90,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      handleError(error);
+      handleError(error, 'register');
     }
   },
 
@@ -68,7 +102,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      handleError(error);
+      handleError(error, 'getServices');
     }
   },
 
@@ -79,7 +113,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      handleError(error);
+      handleError(error, `getService(${id})`);
     }
   },
 
@@ -93,7 +127,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      return handleError(error);
+      return handleError(error, 'addService');
     }
   },
 
@@ -106,49 +140,19 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      return handleError(error);
+      return handleError(error, `updateService(${id})`);
     }
   },
 
-  services: {
-    create: async (formData) => {
-      try {
-        const response = await fetch(API_ENDPOINTS.SERVICES, {
-          method: 'POST',
-          // Important: Don't set Content-Type for FormData
-          headers: getFormDataHeaders(),
-          body: formData,
-        });
-        return handleResponse(response);
-      } catch (error) {
-        return handleError(error);
-      }
-    },
-    
-    update: async (id, formData) => {
-      try {
-        const response = await fetch(API_ENDPOINTS.SERVICE_BY_ID(id), {
-          method: 'PUT',
-          // Important: Don't set Content-Type for FormData
-          headers: getFormDataHeaders(),
-          body: formData,
-        });
-        return handleResponse(response);
-      } catch (error) {
-        return handleError(error);
-      }
-    },
-    
-    delete: async (id) => {
-      try {
-        const response = await fetch(API_ENDPOINTS.SERVICE_BY_ID(id), {
-          method: 'DELETE',
-          headers: getHeaders(),
-        });
-        return handleResponse(response);
-      } catch (error) {
-        return handleError(error);
-      }
+  deleteService: async (id) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.SERVICE_BY_ID(id), {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    } catch (error) {
+      handleError(error, `deleteService(${id})`);
     }
   },
 
@@ -170,7 +174,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      handleError(error);
+      handleError(error, 'getDocuments');
     }
   },
 
@@ -181,7 +185,7 @@ export const api = {
       });
       return handleResponse(response);
     } catch (error) {
-      handleError(error);
+      handleError(error, `getDocument(${id})`);
     }
   },
 
@@ -200,8 +204,7 @@ export const api = {
       console.log('Document added successfully:', result);
       return result;
     } catch (error) {
-      console.error('Error adding document:', error);
-      return handleError(error);
+      handleError(error, 'addDocument');
     }
   },
 
@@ -220,112 +223,20 @@ export const api = {
       console.log('Document updated successfully:', result);
       return result;
     } catch (error) {
-      console.error('Error updating document:', error);
-      return handleError(error);
+      handleError(error, `updateDocument(${id})`);
     }
   },
 
-  documents: {
-    create: async (formData) => {
-      try {
-        const response = await fetch(API_ENDPOINTS.DOCUMENTS, {
-          method: 'POST',
-          // Important: Don't set Content-Type for FormData
-          headers: getFormDataHeaders(),
-          body: formData,
-        });
-        return handleResponse(response);
-      } catch (error) {
-        return handleError(error);
-      }
-    },
-    
-    update: async (id, formData) => {
-      console.log('🔍 Updating document with id:', id);
-      
-      // Validate formData
-      if (!(formData instanceof FormData)) {
-        console.error('⚠️ Invalid formData type:', typeof formData);
-        throw new Error('Invalid form data format');
-      }
-      
-      // Enhanced debugging for FormData contents
-      console.log('📋 Form data initial check:', {
-        hasDocument: formData.has('document'),
-        hasThumbnail: formData.has('thumbnail'),
-        title: formData.get('title'),
-        description: formData.get('description')
+  deleteDocument: async (id) => {
+    try {
+      console.log(`Deleting document ${id}...`);
+      const response = await fetch(API_ENDPOINTS.DOCUMENT_BY_ID(id), {
+        method: 'DELETE',
+        headers: getHeaders(),
       });
-      
-      // Log document file details if present
-      const documentFile = formData.get('document');
-      if (documentFile) {
-        console.log('📄 Document file details:', {
-          name: documentFile.name,
-          type: documentFile.type,
-          size: `${(documentFile.size / 1024).toFixed(2)} KB`
-        });
-      } else {
-        console.log('⚠️ No document file in FormData');
-      }
-      
-      try {
-        // For debugging, log all FormData entries
-        console.log('🔍 All FormData entries:');
-        for (let pair of formData.entries()) {
-          const value = pair[1] instanceof File 
-            ? `File: ${pair[1].name} (${pair[1].type}, ${(pair[1].size / 1024).toFixed(2)} KB)` 
-            : pair[1];
-          console.log(`- ${pair[0]}: ${value}`);
-        }
-        
-        console.log('🔄 Sending PUT request to:', API_ENDPOINTS.DOCUMENT_BY_ID(id));
-        const response = await fetch(API_ENDPOINTS.DOCUMENT_BY_ID(id), {
-          method: 'PUT',
-          // Important: Don't set Content-Type for FormData
-          headers: getFormDataHeaders(),
-          body: formData,
-        });
-        
-        console.log('📥 Response status:', response.status, response.statusText);
-        
-        // If we get a non-JSON response, log it for debugging
-        if (!response.ok) {
-          const contentType = response.headers.get('content-type');
-          console.log('📥 Response content-type:', contentType);
-          
-          if (!contentType || !contentType.includes('application/json')) {
-            const text = await response.text();
-            console.error('⚠️ Non-JSON error response:', text);
-            throw new Error(`Server returned non-JSON response: ${response.status} ${response.statusText}`);
-          }
-        }
-        
-        const data = await handleResponse(response);
-        console.log('✅ Update successful, response data:', data);
-        return data;
-      } catch (error) {
-        console.error('❌ Error updating document:', error);
-        return handleError(error);
-      }
-    },
-    
-    delete: async (id) => {
-      try {
-        console.log('Deleting document:', id);
-        
-        const response = await fetch(API_ENDPOINTS.DOCUMENT_BY_ID(id), {
-          method: 'DELETE',
-          headers: getHeaders(),
-        });
-        
-        const result = await handleResponse(response);
-        console.log('Document deleted successfully:', result);
-        return result;
-      } catch (error) {
-        console.error('Error deleting document:', error);
-        return handleError(error);
-      }
+      return handleResponse(response);
+    } catch (error) {
+      handleError(error, `deleteDocument(${id})`);
     }
   },
 
@@ -353,17 +264,6 @@ export const api = {
       return response.blob();
     } catch (error) {
       handleError(error);
-    }
-  },
-
-  deleteDocument: async (documentId) => {
-    try {
-      const response = await fetch(API_ENDPOINTS.DOCUMENT_BY_ID(documentId), {
-        method: 'DELETE',
-      });
-      return handleResponse(response);
-    } catch (error) {
-      return handleError(error);
     }
   },
 
@@ -568,16 +468,36 @@ export const api = {
 };
 
 // Helper to handle form submission with error toast
-export const handleApiError = (error) => {
-  const message = error instanceof Error 
-    ? error.message 
-    : 'An unexpected error occurred';
-    
+export const handleApiError = (error, operationDescription = 'operation') => {
+  console.error(`Error during ${operationDescription}:`, error);
+  
+  let title = 'Operation Failed';
+  let description = error.message || 'An unknown error occurred.';
+
+  // Customize messages based on status if available
+  if (error.status === 401) {
+    // This case should ideally be handled by the global handleError redirect,
+    // but we add a fallback message just in case.
+    title = 'Authentication Failed';
+    description = 'Please log in again.';
+    // Note: The redirect should have already been triggered by handleError
+  } else if (error.status === 403) {
+    title = 'Permission Denied';
+    description = 'You do not have permission to perform this action.';
+  } else if (error.status === 404) {
+    title = 'Not Found';
+    description = 'The requested resource could not be found.';
+  } else if (error.status >= 500) {
+    title = 'Server Error';
+    description = 'A problem occurred on the server. Please try again later.';
+  }
+
   toast({
-    title: 'Error',
-    description: message,
+    title: title,
+    description: description,
     variant: 'destructive',
   });
   
-  return message;
+  // Optionally re-throw or return a value if needed by the calling component
+  // For now, we just display the toast.
 };
