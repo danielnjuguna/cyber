@@ -62,9 +62,9 @@ export default async function handler(req, res) {
     // --- Handle GET: Get document by ID (Public) ---
     try {
       console.log(`GET /api/documents/${targetDocumentId} request`);
-      // Select URL/Key columns
+      // Select URL/Key columns, removed document_path
       const [documents] = await pool.execute(
-        'SELECT id, title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key, file_type, created_at, updated_at FROM documents WHERE id = ?', 
+        'SELECT id, title, description, category, document_url, document_key, thumbnail_url, thumbnail_key, file_type, created_at, updated_at FROM documents WHERE id = ?', 
         [targetDocumentId]
       );
       if (!documents || documents.length === 0) {
@@ -127,9 +127,6 @@ export default async function handler(req, res) {
       if (documentUrl !== undefined) { 
         updateFields.push('document_url = ?'); 
         updateParams.push(documentUrl || null);
-        // Also update document_path with the same value
-        updateFields.push('document_path = ?'); 
-        updateParams.push(documentUrl || null);
       }
       if (documentKey !== undefined) { updateFields.push('document_key = ?'); updateParams.push(documentKey || null); }
       if (thumbnailUrl !== undefined) { updateFields.push('thumbnail_url = ?'); updateParams.push(thumbnailUrl || null); }
@@ -190,7 +187,8 @@ export default async function handler(req, res) {
       
       // 4. Fetch updated document data to return
       const [updatedDocumentData] = await pool.execute(
-        'SELECT id, title, description, category, document_url, document_key, document_path, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?', 
+        // Removed document_path from SELECT list
+        'SELECT id, title, description, category, document_url, document_key, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?', 
         [targetDocumentId]
       );
 

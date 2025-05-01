@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     // --- Handle GET: Get all documents (Public, with filter/search) ---
     try {
       console.log('GET /api/documents request', req.query);
-      let query = 'SELECT id, title, description, document_url, document_key, document_path, thumbnail_url, thumbnail_key, category, file_type, created_at, updated_at FROM documents';
+      let query = 'SELECT id, title, description, document_url, document_key, thumbnail_url, thumbnail_key, category, file_type, created_at, updated_at FROM documents';
       const params = [];
       const conditions = [];
 
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
 
       // Save document details to the database including file_type
       const [result] = await pool.execute(
-        'INSERT INTO documents (title, description, category, file_type, document_url, document_key, document_path, thumbnail_url, thumbnail_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO documents (title, description, category, file_type, document_url, document_key, thumbnail_url, thumbnail_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [
             title,
             description,
@@ -120,7 +120,6 @@ export default async function handler(req, res) {
             documentType,
             documentUrl,
             documentKey,
-            documentUrl, // Set document_path to same value as documentUrl
             thumbnailUrl || null, // Store null if no thumbnail provided
             thumbnailKey || null
         ]
@@ -131,7 +130,7 @@ export default async function handler(req, res) {
 
       // Fetch the created document to return it, including file_type
       const [newDocumentData] = await pool.execute(
-        'SELECT id, title, description, category, file_type, document_url, document_key, document_path, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
+        'SELECT id, title, description, category, file_type, document_url, document_key, thumbnail_url, thumbnail_key, created_at, updated_at FROM documents WHERE id = ?',
         [newDocumentId]
       );
 

@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       console.log('GET /api/services request');
-      const [services] = await pool.execute('SELECT id, title, description, long_description, image_url, image_key, created_at, updated_at FROM services ORDER BY created_at DESC');
+      const [services] = await pool.execute('SELECT id, title, description, long_description, imageUrl, imageKey, created_at, updated_at FROM services ORDER BY created_at DESC');
       return res.status(200).json({ services });
     } catch (error) {
       console.error('Get services error:', error);
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
 
       // Insert service into database with URL and Key
       const [result] = await pool.execute(
-        'INSERT INTO services (title, description, long_description, image_url, image_key) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO services (title, description, long_description, imageUrl, imageKey) VALUES (?, ?, ?, ?, ?)',
         [title, description, long_description || null, imageUrl || null, imageKey || null]
       );
 
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
       // Fetch the created service to return it
       const [serviceData] = await pool.execute(
          // Select the new URL/Key columns
-        'SELECT id, title, description, long_description, image_url, image_key, created_at, updated_at FROM services WHERE id = ?',
+        'SELECT id, title, description, long_description, imageUrl, imageKey, created_at, updated_at FROM services WHERE id = ?',
         [newServiceId]
       );
 
