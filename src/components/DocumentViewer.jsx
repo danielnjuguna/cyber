@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, AlertCircle, Lock, ChevronLeft, ChevronRight, FileSpreadsheet, FileImage, FilePresentation } from 'lucide-react';
+import { FileText, AlertCircle, Lock, ChevronLeft, ChevronRight, FileSpreadsheet, FileImage, FileKeynote } from 'lucide-react';
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
 import * as mammoth from 'mammoth'; // For DOCX rendering
 import * as XLSX from 'xlsx'; // For Excel files
@@ -25,8 +25,8 @@ const DocumentViewer = ({
     xlsx: { icon: <FileSpreadsheet />, name: 'Excel' },
     xls: { icon: <FileSpreadsheet />, name: 'Excel' },
     csv: { icon: <FileSpreadsheet />, name: 'CSV' },
-    pptx: { icon: <FilePresentation />, name: 'PowerPoint' },
-    ppt: { icon: <FilePresentation />, name: 'PowerPoint' },
+    pptx: { icon: <FileKeynote />, name: 'PowerPoint' },
+    ppt: { icon: <FileKeynote />, name: 'PowerPoint' },
     jpg: { icon: <FileImage />, name: 'Image' },
     jpeg: { icon: <FileImage />, name: 'Image' },
     png: { icon: <FileImage />, name: 'Image' },
