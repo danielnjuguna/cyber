@@ -3,6 +3,7 @@ import { FileText, AlertCircle, Lock, ChevronLeft, ChevronRight, FileSpreadsheet
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
 import * as mammoth from 'mammoth'; // For DOCX rendering
 import * as XLSX from 'xlsx'; // For Excel files
+import { cn } from '@/lib/utils'; // Import cn utility
 
 /**
  * Enhanced DocumentViewer that renders various document types with:
@@ -105,7 +106,7 @@ const DocumentViewer = ({
       // In a production app, you might estimate pages based on content length
       setTotalPages(1);
       setCustomRenderedContent(
-        <div className="p-8 bg-white overflow-y-auto h-full docx-preview">
+        <div className="prose prose-sm sm:prose-base max-w-none p-8 bg-white overflow-y-auto h-full docx-preview">
           <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
         </div>
       );
@@ -141,23 +142,6 @@ const DocumentViewer = ({
       throw new Error(`Error converting Excel document: ${error.message}`);
     }
   };
-
-  // Handle PDF page tracking
-  useEffect(() => {
-    const handlePDFLoaded = (event) => {
-      // Listen for PDF loading complete via events from DocViewer
-      if (event.detail && event.detail.numPages) {
-        setTotalPages(event.detail.numPages);
-        console.log(`PDF loaded with ${event.detail.numPages} pages`);
-      }
-    };
-
-    window.addEventListener('pdfLoaded', handlePDFLoaded);
-    
-    return () => {
-      window.removeEventListener('pdfLoaded', handlePDFLoaded);
-    };
-  }, []);
 
   // Documents array for DocViewer
   const documents = (documentUrl && fileType) ? [{ uri: documentUrl, fileType }] : [];
@@ -252,9 +236,9 @@ const DocumentViewer = ({
                 )
               },
               onDocumentLoad: (doc) => {
-                // Additional document load handler
-                if (doc.numPages) {
+                if (doc && doc.numPages) {
                   setTotalPages(doc.numPages);
+                  console.log(`PDF loaded via onDocumentLoad: ${doc.numPages} pages`);
                 }
               }
             }}
