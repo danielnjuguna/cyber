@@ -32,7 +32,8 @@ uploadthing-debug.js
 **/uploadthing-debug.log
 
 # Sensitive files
-*.pem
+# *.pem # Ignoring all pem files, we will specifically allow the certs/ca.pem
+!certs/ca.pem
 *-firebase-adminsdk-*.json
 
 # Data directories
