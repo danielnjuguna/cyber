@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     // --- Handle GET: Get all documents (Public, with filter/search) ---
     try {
       console.log('GET /api/documents request', req.query);
-      let query = 'SELECT id, title, description, document_url, document_key, document_path, thumbnail_url, thumbnail_key, category, created_at, updated_at FROM documents';
+      let query = 'SELECT id, title, description, document_url, document_key, document_path, thumbnail_url, thumbnail_key, category, file_type, created_at, updated_at FROM documents';
       const params = [];
       const conditions = [];
 
