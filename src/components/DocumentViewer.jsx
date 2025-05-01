@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FileText, AlertCircle, Lock, ChevronLeft, ChevronRight, FileSpreadsheet, FileImage, FilePresentation } from 'lucide-react';
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
 import * as mammoth from 'mammoth'; // For DOCX rendering
-import * as XLSX from 'sheetjs'; // For Excel files
+import * as XLSX from 'xlsx'; // For Excel files
 
 /**
  * Enhanced DocumentViewer that renders various document types with:
