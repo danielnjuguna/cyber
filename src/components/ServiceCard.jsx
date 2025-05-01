@@ -74,36 +74,34 @@ const ServiceCard = ({
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          {/* Image Container with Fixed Height and AspectRatio */}
+          {/* Image Container with Fixed Height - MODIFIED for better fit */}
           <div className="w-full h-[200px] relative">
             {(imageUrl && !imageError) ? (
-              <AspectRatio ratio={16/9} className="h-full">
-                <div className="relative w-full h-full overflow-hidden">
-                  <img 
-                    src={getImageUrl(imageUrl)} 
-                    alt={title} 
-                    className={cn(
-                      "w-full h-full object-cover transition-all duration-500",
-                      isHovered ? "scale-110" : "scale-100",
-                      imageLoaded ? "opacity-100" : "opacity-0"
-                    )}
-                    onLoad={() => setImageLoaded(true)}
-                    onError={handleImageError}
-                  />
-                  {!imageLoaded && !imageError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                    </div>
+              <div className="w-full h-full">
+                <img 
+                  src={getImageUrl(imageUrl)} 
+                  alt={title} 
+                  className={cn(
+                    "w-full h-full object-contain transition-all duration-500",
+                    isHovered ? "scale-105" : "scale-100",
+                    imageLoaded ? "opacity-100" : "opacity-0"
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/30 to-transparent opacity-60"></div>
-                </div>
-              </AspectRatio>
+                  onLoad={() => setImageLoaded(true)}
+                  onError={handleImageError}
+                />
+                {!imageLoaded && !imageError && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
+                    <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/30 to-transparent opacity-60"></div>
+              </div>
             ) : (
               <div className="w-full h-full bg-muted/20 flex items-center justify-center relative">
                 <img 
                   src={fallbackImageUrl} 
                   alt={title} 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/30 to-transparent opacity-60"></div>
               </div>
@@ -159,15 +157,13 @@ const ServiceCard = ({
           <div className="relative">
             {(imageUrl && !imageError) ? (
               <div className="w-full h-48 md:h-56 relative overflow-hidden">
-                <AspectRatio ratio={21/9} className="h-full">
-                  <img 
-                    src={getImageUrl(imageUrl)} 
-                    alt={title} 
-                    className="w-full h-full object-cover"
-                    onError={handleImageError}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-background/80"></div>
-                </AspectRatio>
+                <img 
+                  src={getImageUrl(imageUrl)} 
+                  alt={title} 
+                  className="w-full h-full object-cover"
+                  onError={handleImageError}
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-background/80"></div>
               </div>
             ) : (
               <div className="w-full h-48 md:h-56 bg-gradient-to-r from-primary/20 to-primary/5 flex items-center justify-center">
